@@ -13,6 +13,7 @@ namespace Class
 
         public AKeyChanger? C_Keybind { get; set; }
         public AToggle? T_ConstantAITracking { get; set; }
+        public AToggle? T_StickyAim { get; set; }
         public AToggle? T_Predictions { get; set; }
         public AToggle? T_EMASmoothing { get; set; }
         public AKeyChanger? C_EmergencyKeybind { get; set; }
@@ -29,6 +30,7 @@ namespace Class
         public ADropdown? D_AimingBoundariesAlignment { get; set; }
         public ASlider? S_MouseSensitivity { get; set; }
         public ASlider? S_MouseJitter { get; set; }
+        public ASlider? S_StickyAimThreshold { get; set; }
         public ASlider? S_YOffset { get; set; }
         public ASlider? S_YOffsetPercent { get; set; }
         public ASlider? S_XOffset { get; set; }
@@ -39,6 +41,9 @@ namespace Class
         public ATitle? AT_TriggerBot { get; set; }
 
         public AToggle? T_AutoTrigger { get; set; }
+        public AToggle? T_SprayMode { get; set; }
+        //public AToggle? T_OnlyWhenHeld { get; set; }
+        public AToggle? T_CursorCheck { get; set; }
 
         public ASlider? S_AutoTriggerDelay { get; set; }
 
@@ -86,6 +91,7 @@ namespace Class
 
         public AToggle? T_ShowAIConfidence { get; set; }
         public AToggle? T_ShowTracers { get; set; }
+        public ADropdown? D_TracerPosition { get; set; }
         public AColorChanger? CC_DetectedPlayerColor { get; set; }
         public ASlider? S_DPFontSize { get; set; }
         public ASlider? S_DPCornerRadius { get; set; }
@@ -97,9 +103,11 @@ namespace Class
         public AToggle? T_CollectDataWhilePlaying { get; set; }
         public AToggle? T_AutoLabelData { get; set; }
         public ADropdown? D_MouseMovementMethod { get; set; }
+        public ADropdown? D_ScreenCaptureMethod { get; set; }
         public ComboBoxItem? DDI_LGHUB { get; set; }
         public ComboBoxItem? DDI_RazerSynapse { get; set; }
         public ComboBoxItem? DDI_ddxoft { get; set; }
+        public AToggle? T_DebugMode { get; set; }
         public ASlider? S_AIMinimumConfidence { get; set; }
         public AToggle? T_MouseBackgroundEffect { get; set; }
         public AToggle? T_UITopMost { get; set; }
@@ -110,6 +118,14 @@ namespace Class
         public ATitle? AT_XYPercentageAdjustmentEnabler { get; set; }
         public AToggle? T_XAxisPercentageAdjustment { get; set; }
         public AToggle? T_YAxisPercentageAdjustment { get; set; }
+
+        // Theme Color Changer
+        public ATitle? AT_ThemeColorWheel { get; set; }
+        public AColorWheel? ThemeColorWheel { get; set; }
+
+        // Display Selector
+        public ATitle? AT_DisplaySelector { get; set; }
+        public ADisplaySelector? DisplaySelector { get; set; }
 
         // ddxoft UI
         public AFileLocator? AFL_ddxoftDLLLocator { get; set; }

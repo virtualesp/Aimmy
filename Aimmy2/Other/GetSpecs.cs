@@ -1,5 +1,5 @@
-﻿using System.Management;
-using Visuality;
+﻿using Other;
+using System.Management;
 
 namespace Aimmy2.Class
 {
@@ -20,7 +20,7 @@ namespace Aimmy2.Class
             }
             catch (Exception e)
             {
-                new NoticeBar(e.Message, 10000).Show();
+                LogManager.Log(LogManager.LogLevel.Error, $"Failed to get {HardwareClass} {Syntax}: {e.Message}", true);
                 return "Not Found";
             }
         }

@@ -1,11 +1,11 @@
 ﻿using Microsoft.Win32;
+using Other;
 using System.Diagnostics;
 using System.IO;
 using System.Management;
 using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Windows;
-using Visuality;
 
 namespace MouseMovementLibraries.RazerSupport
 {
@@ -48,7 +48,6 @@ namespace MouseMovementLibraries.RazerSupport
 
             var result = MessageBox.Show("Razer Synapse is not running, do you have it installed?",
                                          "Aimmy - Razer Synapse", MessageBoxButton.YesNo);
-            Debug.WriteLine("Couldn't Find Process");
             if (result == MessageBoxResult.No)
             {
                 await InstallRazerSynapse();
@@ -100,7 +99,7 @@ namespace MouseMovementLibraries.RazerSupport
                     WorkingDirectory = Path.GetTempPath()
                 });
 
-                new NoticeBar("Razer Synapse downloaded, please look for UAC prompt and install Razer Synapse.", 4000).Show();
+                LogManager.Log(LogManager.LogLevel.Info, "Razer Synapse downloaded, please look for UAC prompt and install Razer Synapse.", true);
             }
         }
 
@@ -108,7 +107,7 @@ namespace MouseMovementLibraries.RazerSupport
         {
             try
             {
-                new NoticeBar($"{rzctlpath} is missing, attempting to download {rzctlpath}.", 4000).Show();
+                LogManager.Log(LogManager.LogLevel.Info, $"{rzctlpath} is missing, attempting to download {rzctlpath}.", true);
 
                 using HttpClient httpClient = new();
                 using var response = await httpClient.GetAsync(new Uri(rzctlDownloadUrl), HttpCompletionOption.ResponseHeadersRead);
@@ -118,12 +117,12 @@ namespace MouseMovementLibraries.RazerSupport
                     using var contentStream = await response.Content.ReadAsStreamAsync();
                     using var fileStream = new FileStream(rzctlpath, FileMode.Create, FileAccess.Write, FileShare.None, 4096, true);
                     await contentStream.CopyToAsync(fileStream);
-                    new NoticeBar($"{rzctlpath} has downloaded successfully, please re-select Razer Synapse to load the DLL.", 4000).Show();
+                    LogManager.Log(LogManager.LogLevel.Info, $"{rzctlpath} has downloaded successfully, please re-select Razer Synapse to load the DLL.", true);
                 }
             }
             catch
             {
-                new NoticeBar($"{rzctlpath} has failed to install, please try a different Mouse Movement Method.", 4000).Show();
+                LogManager.Log(LogManager.LogLevel.Error, $"{rzctlpath} has failed to download, please try a different Mouse Movement Method.", true);
             }
         }
 

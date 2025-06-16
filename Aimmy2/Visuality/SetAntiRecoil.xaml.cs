@@ -1,7 +1,9 @@
 ﻿using Aimmy2;
 using Aimmy2.Class;
+using Aimmy2.Theme;
 using AimmyWPF.Class;
 using InputLogic;
+using Other;
 using System.Windows;
 using System.Windows.Threading;
 
@@ -34,6 +36,28 @@ namespace Visuality
             HoldDownTimer.Start();
 
             ChangingFireRate = (int)Dictionary.AntiRecoilSettings["Fire Rate"];
+
+            // Initialize theme colors
+            UpdateThemeColors();
+
+            // Subscribe to theme changes
+            ThemeManager.RegisterElement(this);
+            ThemeManager.ThemeChanged += OnThemeChanged;
+        }
+
+        private void OnThemeChanged(object sender, System.Windows.Media.Color newColor)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                UpdateThemeColors();
+            });
+        }
+
+        private void UpdateThemeColors()
+        {
+            // Update gradient colors
+            TopGradientStop.Color = ThemeManager.ThemeColorDark;
+            ThemeGradientStop.Color = ThemeManager.ThemeColorDark;
         }
 
         private void HoldDownTimerTicker(object? sender, EventArgs e)
@@ -89,7 +113,7 @@ namespace Visuality
 
             MainWin.WindowState = WindowState.Normal;
 
-            new NoticeBar("The Fire Rate is set successfully.", 5000).Show();
+            LogManager.Log(LogManager.LogLevel.Info, $"The Fire Rate is set to {ChangingFireRate}ms", true);
 
             Close();
         }
@@ -102,6 +126,14 @@ namespace Visuality
             Animator.ObjectShift(TimeSpan.FromMilliseconds(350), BulletBorder, BulletBorder.Margin, new Thickness(0, 0, 0, -140));
 
             HoldDownTimer.Start();
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            // Unregister from theme manager
+            ThemeManager.ThemeChanged -= OnThemeChanged;
+            ThemeManager.UnregisterElement(this);
+            base.OnClosed(e);
         }
     }
 }

@@ -29,6 +29,7 @@ namespace Aimmy2.Class
             { "Dynamic FOV Size", 200 },
             { "Mouse Sensitivity (+/-)", 0.80 },
             { "Mouse Jitter", 4 },
+            { "Sticky Aim Threshold", 50 },
             { "Y Offset (Up/Down)", 0 },
             { "Y Offset (%)", 50 },
             { "X Offset (Left/Right)", 0 },
@@ -47,6 +48,7 @@ namespace Aimmy2.Class
         public static Dictionary<string, dynamic> toggleState = new()
         {
             { "Aim Assist", false },
+            { "Sticky Aim", false },
             { "Constant AI Tracking", false },
             { "Predictions", false },
             { "EMA Smoothening", false },
@@ -58,12 +60,17 @@ namespace Aimmy2.Class
             { "Dynamic FOV", false },
             { "Masking", false },
             { "Show Detected Player", false },
+            { "Cursor Check", false },
+            { "Spray Mode", false },
+            //{ "Only When Held", false },
+            { "Show FOV", true },
             { "Show AI Confidence", false },
             { "Show Tracers", false },
             { "Collect Data While Playing", false },
             { "Auto Label Data", false },
             { "LG HUB Mouse Movement", false },
             { "Mouse Background Effect", true },
+            { "Debug Mode", false },
             { "UI TopMost", false },
             { "X Axis Percentage Adjustment", false },
             { "Y Axis Percentage Adjustment", false }
@@ -79,7 +86,9 @@ namespace Aimmy2.Class
             { "FOV Config", false },
             { "ESP Config", false },
             { "Settings Menu", false },
-            { "X/Y Percentage Adjustment", false }
+            { "X/Y Percentage Adjustment", false },
+            { "Theme Settings", false },
+            { "Display Settings", false}
         };
 
         public static Dictionary<string, dynamic> dropdownState = new()
@@ -87,13 +96,17 @@ namespace Aimmy2.Class
             { "Prediction Method", "Kalman Filter" },
             { "Detection Area Type", "Closest to Center Screen" },
             { "Aiming Boundaries Alignment", "Center" },
-            { "Mouse Movement Method", "Mouse Event" }
+            { "Mouse Movement Method", "Mouse Event" },
+            { "Screen Capture Method", "DirectX" },
+            { "Tracer Position", "Bottom" }
+
         };
 
         public static Dictionary<string, dynamic> colorState = new()
         {
             { "FOV Color", "#FF8080FF"},
-            { "Detected Player Color", "#FF00FFFF"}
+            { "Detected Player Color", "#FF00FFFF"},
+            { "Theme Color", "#FF722ED1" }
         };
 
         public static Dictionary<string, dynamic> AntiRecoilSettings = new()

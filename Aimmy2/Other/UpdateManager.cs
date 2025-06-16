@@ -3,7 +3,6 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Net.Http;
-using Visuality;
 
 namespace Other
 {
@@ -16,6 +15,28 @@ namespace Other
             client = new HttpClient();
         }
 
+        private int CompareVersions(string currentVersion, string latestVersion)
+        {
+            try
+            {
+                // Remove 'v' prefix if present
+                currentVersion = currentVersion.TrimStart('v', 'V');
+                latestVersion = latestVersion.TrimStart('v', 'V');
+
+                // Parse versions
+                var current = Version.Parse(currentVersion);
+                var latest = Version.Parse(latestVersion);
+
+                return current.CompareTo(latest);
+            }
+            catch (Exception ex)
+            {
+
+                // Fallback to string comparison if parsing fails
+                return string.Compare(currentVersion, latestVersion, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
         public async Task CheckForUpdate(string currentVersion)
         {
             GithubManager githubManager = new();
@@ -23,21 +44,28 @@ namespace Other
 
             if (string.IsNullOrEmpty(latestVersion) || string.IsNullOrEmpty(latestZipUrl))
             {
-                new NoticeBar("Failed to get latest release information from Github.", 5000).Show();
+                LogManager.Log(LogManager.LogLevel.Error, "Failed to get latest release information from Github.", true);
                 return;
             }
-            else
-            {
-                if (latestVersion == currentVersion)
-                {
-                    new NoticeBar("You are up to date.", 5000).Show();
-                    return;
-                }
 
-                new NoticeBar("An update was found, downloading the update from Github.", 5000).Show();
-                githubManager.Dispose();
-                await DoUpdate(latestZipUrl);
+            // Compare versions
+            var comparison = CompareVersions(currentVersion, latestVersion);
+
+            if (comparison == 0)
+            {
+                LogManager.Log(LogManager.LogLevel.Info, "You are up to date.", true);
+                return;
             }
+            else if (comparison > 0)
+            {
+                LogManager.Log(LogManager.LogLevel.Info, $"You are running a newer version ({currentVersion}) than the latest release ({latestVersion}).", true);
+                return;
+            }
+
+            // Only update if latest version is newer
+            LogManager.Log(LogManager.LogLevel.Info, $"A new version is available: {latestVersion}. Current version: {currentVersion}.", true);
+            githubManager.Dispose();
+            await DoUpdate(latestZipUrl);
         }
 
         private async Task DoUpdate(string latestZipUrl)

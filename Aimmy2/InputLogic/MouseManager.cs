@@ -16,6 +16,7 @@ namespace InputLogic
 
         private static DateTime LastClickTime = DateTime.MinValue;
         private static int LastAntiRecoilClickTime = 0;
+        private static bool isSpraying = false;
 
         private const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
         private const uint MOUSEEVENTF_LEFTUP = 0x0004;
@@ -49,18 +50,10 @@ namespace InputLogic
         }
 
         private static double EmaSmoothing(double previousValue, double currentValue, double smoothingFactor) => (currentValue * smoothingFactor) + (previousValue * (1 - smoothingFactor));
-
-        public static async Task DoTriggerClick()
+        
+        // Cleanup
+        private static (Action down, Action up) GetMouseActions()
         {
-            int timeSinceLastClick = (int)(DateTime.UtcNow - LastClickTime).TotalMilliseconds;
-            int triggerDelayMilliseconds = (int)(Dictionary.sliderSettings["Auto Trigger Delay"] * 1000);
-            const int clickDelayMilliseconds = 20;
-
-            if (timeSinceLastClick < triggerDelayMilliseconds && LastClickTime != DateTime.MinValue)
-            {
-                return;
-            }
-
             string mouseMovementMethod = Dictionary.dropdownState["Mouse Movement Method"];
             Action mouseDownAction;
             Action mouseUpAction;
@@ -71,35 +64,100 @@ namespace InputLogic
                     mouseDownAction = () => SendInputMouse.SendMouseCommand(MOUSEEVENTF_LEFTDOWN);
                     mouseUpAction = () => SendInputMouse.SendMouseCommand(MOUSEEVENTF_LEFTUP);
                     break;
-
                 case "LG HUB":
                     mouseDownAction = () => LGMouse.Move(1, 0, 0, 0);
                     mouseUpAction = () => LGMouse.Move(0, 0, 0, 0);
                     break;
-
                 case "Razer Synapse (Require Razer Peripheral)":
                     mouseDownAction = () => RZMouse.mouse_click(1);
                     mouseUpAction = () => RZMouse.mouse_click(0);
                     break;
-
                 case "ddxoft Virtual Input Driver":
                     mouseDownAction = () => DdxoftMain.ddxoftInstance.btn!(1);
                     mouseUpAction = () => DdxoftMain.ddxoftInstance.btn(2);
                     break;
-
                 default:
                     mouseDownAction = () => mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
                     mouseUpAction = () => mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0);
                     break;
             }
 
-            mouseDownAction.Invoke();
+            return (mouseDownAction, mouseUpAction);
+        }
+
+        public static async Task DoTriggerClick(RectangleF? detectionBox = null)
+        {
+            // there was a toggle for this, but i realized if it was off, it would never stop spraying. - T
+            if (!(InputBindingManager.IsHoldingBinding("Aim Keybind") || InputBindingManager.IsHoldingBinding("Second Aim Keybind"))) 
+            {
+                ResetSprayState();
+                return;
+            }
+
+
+            if (Dictionary.toggleState["Spray Mode"])
+            {
+                if (Dictionary.toggleState["Cursor Check"])
+                {
+                    Point mousePos = WinAPICaller.GetCursorPosition();
+
+                    if (detectionBox.HasValue && !detectionBox.Value.Contains(mousePos.X, mousePos.Y))
+                    {
+                        if (isSpraying) ReleaseMouseButton();
+                        return;
+                    }
+                }
+
+                if (!isSpraying) HoldMouseButton();
+                return;
+            }
+
+            // Single click logic if spray mode off
+            int timeSinceLastClick = (int)(DateTime.UtcNow - LastClickTime).TotalMilliseconds;
+            int triggerDelayMilliseconds = (int)(Dictionary.sliderSettings["Auto Trigger Delay"] * 1000);
+            const int clickDelayMilliseconds = 20;
+
+            if (timeSinceLastClick < triggerDelayMilliseconds && LastClickTime != DateTime.MinValue)
+            {
+                return;
+            }
+
+            var (mouseDown, mouseUp) = GetMouseActions();
+
+            mouseDown.Invoke();
             await Task.Delay(clickDelayMilliseconds);
-            mouseUpAction.Invoke();
+            mouseUp.Invoke();
 
             LastClickTime = DateTime.UtcNow;
         }
 
+        #region Spray Mode Methods
+        public static void HoldMouseButton()
+        {
+            if (isSpraying) return;
+
+            var (mouseDown, _) = GetMouseActions();
+            mouseDown.Invoke();
+            isSpraying = true;
+        }
+
+        public static void ReleaseMouseButton()
+        {
+            if (!isSpraying) return;
+
+            var (_, mouseUp) = GetMouseActions();
+            mouseUp.Invoke();
+            isSpraying = false;
+        }
+
+        public static void ResetSprayState()
+        {
+            if (isSpraying)
+            {
+                ReleaseMouseButton();
+            }
+        }
+        #endregion
         public static void DoAntiRecoil()
         {
             int timeSinceLastClick = Math.Abs(DateTime.UtcNow.Millisecond - LastAntiRecoilClickTime);
@@ -189,9 +247,14 @@ namespace InputLogic
                     break;
             }
 
-            if (Dictionary.toggleState["Auto Trigger"])
+            if (Dictionary.toggleState["Auto Trigger"] &&
+                !Dictionary.toggleState["Spray Mode"])
             {
-                Task.Run(DoTriggerClick);
+                Task.Run(() => DoTriggerClick());
+            }
+            else if (!Dictionary.toggleState["Auto Trigger"])
+            {
+                ResetSprayState();
             }
         }
     }

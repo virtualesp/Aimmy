@@ -31,26 +31,8 @@ namespace InputLogic
 
         private static Random MouseRandom = new();
 
-        private static Point CubicBezier(Point start, Point end, Point control1, Point control2, double t)
-        {
-            double u = 1 - t;
-            double tt = t * t;
-            double uu = u * u;
-
-            double x = uu * u * start.X + 3 * uu * t * control1.X + 3 * u * tt * control2.X + tt * t * end.X;
-            double y = uu * u * start.Y + 3 * uu * t * control1.Y + 3 * u * tt * control2.Y + tt * t * end.Y;
-
-            if (IsEMASmoothingEnabled)
-            {
-                x = EmaSmoothing(previousX, x, smoothingFactor);
-                y = EmaSmoothing(previousY, y, smoothingFactor);
-            }
-
-            return new Point((int)x, (int)y);
-        }
-
         private static double EmaSmoothing(double previousValue, double currentValue, double smoothingFactor) => (currentValue * smoothingFactor) + (previousValue * (1 - smoothingFactor));
-        
+
         // Cleanup
         private static (Action down, Action up) GetMouseActions()
         {
@@ -88,7 +70,7 @@ namespace InputLogic
         public static async Task DoTriggerClick(RectangleF? detectionBox = null)
         {
             // there was a toggle for this, but i realized if it was off, it would never stop spraying. - T
-            if (!(InputBindingManager.IsHoldingBinding("Aim Keybind") || InputBindingManager.IsHoldingBinding("Second Aim Keybind"))) 
+            if (!(InputBindingManager.IsHoldingBinding("Aim Keybind") || InputBindingManager.IsHoldingBinding("Second Aim Keybind")))
             {
                 ResetSprayState();
                 return;
@@ -212,17 +194,45 @@ namespace InputLogic
 
             Point start = new(0, 0);
             Point end = new(targetX, targetY);
-            Point control1 = new(start.X + (end.X - start.X) / 3, start.Y + (end.Y - start.Y) / 3);
-            Point control2 = new(start.X + 2 * (end.X - start.X) / 3, start.Y + 2 * (end.Y - start.Y) / 3);
-            Point newPosition = CubicBezier(start, end, control1, control2, 1 - Dictionary.sliderSettings["Mouse Sensitivity (+/-)"]);
+            Point newPosition = new Point(0, 0);
 
-            targetX = Math.Clamp(targetX, -150, 150);
-            targetY = Math.Clamp(targetY, -150, 150);
+            switch (Dictionary.dropdownState["Movement Path"])
+            {
+                case "Cubic Bezier":
+                    Point control1 = new Point(start.X + (end.X - start.X) / 3, start.Y + (end.Y - start.Y) / 3);
+                    Point control2 = new Point(start.X + 2 * (end.X - start.X) / 3, start.Y + 2 * (end.Y - start.Y) / 3);
+                    newPosition = MovementPaths.CubicBezier(start, end, control1, control2, 1 - Dictionary.sliderSettings["Mouse Sensitivity (+/-)"]);
+                    break;
+                case "Linear":
+                    newPosition = MovementPaths.Lerp(start, end, 1 - Dictionary.sliderSettings["Mouse Sensitivity (+/-)"]);
+                    break;
+                case "Exponential":
+                    newPosition = MovementPaths.Exponential(start, end, 1 - (Dictionary.sliderSettings["Mouse Sensitivity (+/-)"] - 0.2), 3.0);
+                    break;
+                case "Adaptive":
+                    newPosition = MovementPaths.Adaptive(start, end, 1 - Dictionary.sliderSettings["Mouse Sensitivity (+/-)"]);
+                    break;
+                case "Perlin Noise":
+                    newPosition = MovementPaths.PerlinNoise(start, end, 1 - Dictionary.sliderSettings["Mouse Sensitivity (+/-)"], 20, 0.5);
+                    break;
+                default:
+                    newPosition = MovementPaths.Lerp(start, end, 1 - Dictionary.sliderSettings["Mouse Sensitivity (+/-)"]);
+                    break;
+            }
 
-            targetY = (int)(targetY * aspectRatioCorrection);
+            if (IsEMASmoothingEnabled)
+            {
+                newPosition.X = (int)EmaSmoothing(previousX, newPosition.X, smoothingFactor);
+                newPosition.Y = (int)EmaSmoothing(previousY, newPosition.Y, smoothingFactor);
+            }
 
-            targetX += jitterX;
-            targetY += jitterY;
+            newPosition.X = Math.Clamp(newPosition.X, -150, 150);
+            newPosition.Y = Math.Clamp(newPosition.Y, -150, 150);
+
+            newPosition.Y = (int)(newPosition.Y / aspectRatioCorrection);
+
+            newPosition.X += jitterX;
+            newPosition.Y += jitterY;
 
             switch (Dictionary.dropdownState["Mouse Movement Method"])
             {
@@ -247,12 +257,10 @@ namespace InputLogic
                     break;
             }
 
-            if (Dictionary.toggleState["Auto Trigger"] &&
-                !Dictionary.toggleState["Spray Mode"])
-            {
-                Task.Run(() => DoTriggerClick());
-            }
-            else if (!Dictionary.toggleState["Auto Trigger"])
+            previousX = newPosition.X;
+            previousY = newPosition.Y;
+
+            if (!Dictionary.toggleState["Auto Trigger"])
             {
                 ResetSprayState();
             }

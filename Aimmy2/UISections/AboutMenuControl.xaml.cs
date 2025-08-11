@@ -26,6 +26,7 @@ namespace Aimmy2.Controls
                 ("whoswhip", "Bug fixes & EMA"),
                 ("HakaCat", "Idea for Auto Labelling Data"),
                 ("Themida", "LGHub check"),
+                ("camilia2o7", "Stream Guard & Bug Fixes"), 
                 ("Ninja", "MarsQQ's emotional support")
             }),
             ("Model Creators", new[]

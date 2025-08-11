@@ -1,13 +1,14 @@
-﻿using System.IO;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Media;
+﻿using Aimmy2.AILogic;
 using Aimmy2.Class;
 using Aimmy2.UILibrary;
 using Class;
 using InputLogic;
 using Microsoft.Win32;
 using Other;
+using System.IO;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
 using UILibrary;
 using Visuality;
 
@@ -15,6 +16,10 @@ namespace Aimmy2.Controls
 {
     public partial class AimMenuControl : UserControl
     {
+        //--
+        UISections.ColorPicker colorPickerInstance = null;
+        UISections.ColorPicker fovColorPickerInstance = null;
+        //--
         private MainWindow? _mainWindow;
         private bool _isInitialized;
 
@@ -54,6 +59,9 @@ namespace Aimmy2.Controls
 
             // Load minimize states from global dictionary if they exist
             LoadMinimizeStatesFromGlobal();
+
+            AIManager.ClassesUpdated += OnClassesChanged;
+            AIManager.ImageSizeUpdated += OnImageSizeChanged;
 
             // Load all sections
             LoadAimAssist();
@@ -213,6 +221,17 @@ namespace Aimmy2.Controls
                     _mainWindow.AddDropdownItem(d, "Shall0e's Prediction");
                     _mainWindow.AddDropdownItem(d, "wisethef0x's EMA Prediction");
                 })
+
+                .AddDropdown("Movement Path", d =>
+                {
+                    d.DropdownBox.SelectedIndex = 0;
+                    uiManager.D_MovementPath = d;
+                    _mainWindow.AddDropdownItem(d, "Cubic Bezier");
+                    _mainWindow.AddDropdownItem(d, "Exponential");
+                    _mainWindow.AddDropdownItem(d, "Linear");
+                    _mainWindow.AddDropdownItem(d, "Adaptive");
+                    _mainWindow.AddDropdownItem(d, "Perlin Noise");
+                })
                 .AddDropdown("Detection Area Type", d =>
                 {
                     d.DropdownBox.SelectedIndex = -1;
@@ -236,6 +255,13 @@ namespace Aimmy2.Controls
                     _mainWindow.AddDropdownItem(d, "Center");
                     _mainWindow.AddDropdownItem(d, "Top");
                     _mainWindow.AddDropdownItem(d, "Bottom");
+                })
+                .AddDropdown("Target Class", d =>
+                {
+                    d.DropdownBox.SelectedIndex = 0;
+                    uiManager.D_TargetClass = d;
+                    _mainWindow.AddDropdownItem(d, "Best Confidence");
+                    UpdateTargetClassDropdown(d);
                 });
 
             // Add sliders with validation
@@ -253,10 +279,10 @@ namespace Aimmy2.Controls
                     {
                         var value = s.Slider.Value;
                         if (value >= 0.98)
-                            LogManager.Log(LogManager.LogLevel.Warning, 
+                            LogManager.Log(LogManager.LogLevel.Warning,
                                 "The Mouse Sensitivity you have set can cause Aimmy to be unable to aim, please decrease if you suffer from this problem", true);
                         else if (value <= 0.1)
-                            LogManager.Log(LogManager.LogLevel.Warning, 
+                            LogManager.Log(LogManager.LogLevel.Warning,
                                 "The Mouse Sensitivity you have set can cause Aimmy to be unstable to aim, please increase if you suffer from this problem", true);
                     };
                 })
@@ -265,7 +291,7 @@ namespace Aimmy2.Controls
                 {
                     uiManager.S_StickyAimThreshold = s;
                     var value = s.Slider.Value;
-                    if(value <= 10)
+                    if (value <= 10)
                     {
                         LogManager.Log(LogManager.LogLevel.Warning,
                             "The threshold you have set may cause sticky aim to not work as intended, please increase if you suffer from this issue.\nINFO: The Sticky aim threshold is how many pixels it will take until it realizes the target is gone and moves on to another target",
@@ -393,11 +419,58 @@ namespace Aimmy2.Controls
                 })
                 .AddToggle("FOV", t => uiManager.T_FOV = t)
                 .AddToggle("Dynamic FOV", t => uiManager.T_DynamicFOV = t)
+                .AddToggle("Third Person Support", t => uiManager.T_ThirdPersonSupport = t)
                 .AddKeyChanger("Dynamic FOV Keybind", k => uiManager.C_DynamicFOV = k)
+                .AddDropdown("FOV Style", d =>
+                {
+                    uiManager.D_FOVSTYLE = d;
+
+                    var circleItem = _mainWindow.AddDropdownItem(d, "Circle");
+                    var rectangleItem = _mainWindow.AddDropdownItem(d, "Rectangle");
+
+                    circleItem.Selected += (s, e) =>
+                    {
+                        MainWindow.FOVWindow.Circle.Visibility = Visibility.Visible;
+                        MainWindow.FOVWindow.RectangleShape.Visibility = Visibility.Collapsed;
+                    };
+
+                    rectangleItem.Selected += (s, e) =>
+                    {
+                        MainWindow.FOVWindow.Circle.Visibility = Visibility.Collapsed;
+                        MainWindow.FOVWindow.RectangleShape.Visibility = Visibility.Visible;
+                    };
+                })
                 .AddColorChanger("FOV Color", c =>
                 {
-                    uiManager.CC_FOVColor = c;
-                    c.Reader.Click += (s, e) => HandleColorChange(c, "FOV Color", PropertyChanger.PostColor);
+                    c.Reader.Click += (s, e) =>
+                    {
+                        if (fovColorPickerInstance != null && fovColorPickerInstance.IsVisible)
+                        {
+                            fovColorPickerInstance.Activate();
+                            return;
+                        }
+
+                        Color initialColor = Colors.White;
+                        if (c.Reader.Background is SolidColorBrush scb)
+                            initialColor = scb.Color;
+                        fovColorPickerInstance = new UISections.ColorPicker(initialColor, "FOV Color");
+
+                        fovColorPickerInstance.ColorChanged += (color) =>
+                        {
+                            if (uiManager?.CC_FOVColor?.Reader != null)
+                            {
+                                uiManager.CC_FOVColor.Reader.Background = new SolidColorBrush(color);
+                            }
+                            PropertyChanger.PostColor(color);
+                        };
+
+                        fovColorPickerInstance.Closed += (sender, args) =>
+                        {
+                            fovColorPickerInstance = null;
+                        };
+
+                        fovColorPickerInstance.Show();
+                    };
                 })
                 .AddSlider("FOV Size", "Size", 1, 1, 10, 640, s =>
                 {
@@ -464,8 +537,35 @@ namespace Aimmy2.Controls
             builder
                 .AddColorChanger("Detected Player Color", c =>
                 {
-                    uiManager.CC_DetectedPlayerColor = c;
-                    c.Reader.Click += (s, e) => HandleColorChange(c, "Detected Player Color", PropertyChanger.PostDPColor);
+                    c.Reader.Click += (s, e) =>
+                    {
+                        if (colorPickerInstance != null && colorPickerInstance.IsVisible)
+                        {
+                            colorPickerInstance.Activate();
+                            return;
+                        }
+
+                        Color initialColor = Colors.White;
+                        if (c.Reader.Background is SolidColorBrush scb)
+                            initialColor = scb.Color;
+                        colorPickerInstance = new UISections.ColorPicker(initialColor, "ESP Color");
+
+                        colorPickerInstance.ColorChanged += (color) =>
+                        {
+                            if (uiManager?.CC_DetectedPlayerColor?.Reader != null)
+                            {
+                                uiManager.CC_DetectedPlayerColor.Reader.Background = new SolidColorBrush(color);
+                            }
+                            PropertyChanger.PostDPColor(color);
+                        };
+
+                        colorPickerInstance.Closed += (sender, args) =>
+                        {
+                            colorPickerInstance = null;
+                        };
+
+                        colorPickerInstance.Show();
+                    };
                 })
                 .AddSlider("AI Confidence Font Size", "Size", 1, 1, 1, 30, s =>
                 {
@@ -493,6 +593,74 @@ namespace Aimmy2.Controls
         #endregion
 
         #region Helper Methods
+
+        private void OnClassesChanged(Dictionary<int, string> classes)
+        {
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                if (_mainWindow?.uiManager.D_TargetClass != null)
+                {
+                    UpdateTargetClassDropdown(_mainWindow.uiManager.D_TargetClass, classes);
+                }
+            });
+        }
+
+        private void UpdateTargetClassDropdown(ADropdown dropdown, Dictionary<int, string>? _classes = null)
+        {
+            if (dropdown?.DropdownBox == null) return;
+            string? selection = (dropdown.DropdownBox.SelectedItem as ComboBoxItem)?.Content?.ToString();
+
+            var removedItems = dropdown.DropdownBox.Items.Cast<ComboBoxItem>()
+                .Where(item => item.Content?.ToString() != "Best Confidence")
+                .ToList();
+
+            foreach (var item in removedItems)
+            {
+                dropdown.DropdownBox.Items.Remove(item);
+            }
+
+            var classes = _classes ?? FileManager.AIManager?.ModelClasses ?? new Dictionary<int, string>();
+
+            foreach (var kvp in classes.OrderBy(x => x.Key))
+            {
+                _mainWindow!.AddDropdownItem(dropdown, kvp.Value);
+            }
+
+            if (!string.IsNullOrEmpty(selection)) // tries to restore the selection
+            {
+                for (int i = 0; i < dropdown.DropdownBox.Items.Count; i++)
+                {
+                    if ((dropdown.DropdownBox.Items[i] as ComboBoxItem)?.Content?.ToString() == selection)
+                    {
+                        dropdown.DropdownBox.SelectedIndex = i;
+                        return;
+                    }
+                }
+            }
+
+            dropdown.DropdownBox.SelectedIndex = 0;
+        }
+
+        private void OnImageSizeChanged(int imageSize)
+        {
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                if (_mainWindow?.uiManager.S_FOVSize != null && _mainWindow?.uiManager.S_DynamicFOVSize != null)
+                {
+                    UpdateFovSizeSlider(_mainWindow.uiManager.S_FOVSize, imageSize);
+                    UpdateFovSizeSlider(_mainWindow.uiManager.S_DynamicFOVSize, imageSize);
+                }
+            });
+        }
+        private void UpdateFovSizeSlider(ASlider slider, int imageSize = 640)
+        {
+            if (slider.Slider == null) return;
+            if (imageSize < slider.Slider.Value)
+            {
+                slider.Slider.Value = imageSize;
+            }
+            slider.Slider.Maximum = imageSize;
+        }
 
         private void HandleColorChange(AColorChanger colorChanger, string settingKey, Action<Color> updateAction)
         {

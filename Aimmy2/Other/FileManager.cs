@@ -160,6 +160,7 @@ namespace Other
                 watcher.Renamed += LoadConfigsIntoListBox;
             }
         }
+
         private void ModelListBox_DragOver(object sender, DragEventArgs e)
         {
             if (e.Data.GetDataPresent(DataFormats.FileDrop))

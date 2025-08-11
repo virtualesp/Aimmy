@@ -24,10 +24,11 @@ namespace Class
         public ATitle? AT_AimConfig { get; set; }
 
         public ADropdown? D_PredictionMethod { get; set; }
-
+        public ADropdown? D_MovementPath { get; set; }
         public ADropdown? D_DetectionAreaType { get; set; }
         public ComboBoxItem? DDI_ClosestToCenterScreen { get; set; }
         public ADropdown? D_AimingBoundariesAlignment { get; set; }
+        public ADropdown? D_TargetClass { get; set; }
         public ASlider? S_MouseSensitivity { get; set; }
         public ASlider? S_MouseJitter { get; set; }
         public ASlider? S_StickyAimThreshold { get; set; }
@@ -75,11 +76,13 @@ namespace Class
 
         // FOV
         public ATitle? AT_FOV { get; set; }
-
         public AToggle? T_FOV { get; set; }
-
         public AToggle? T_DynamicFOV { get; set; }
+        public AToggle? T_ThirdPersonSupport { get; set; }
         public AKeyChanger? C_DynamicFOV { get; set; }
+        //--
+        public ADropdown D_FOVSTYLE { get; set; }
+        //--
         public AColorChanger? CC_FOVColor { get; set; }
         public ASlider? S_FOVSize { get; set; }
         public ASlider? S_DynamicFOVSize { get; set; }
@@ -104,6 +107,7 @@ namespace Class
         public AToggle? T_AutoLabelData { get; set; }
         public ADropdown? D_MouseMovementMethod { get; set; }
         public ADropdown? D_ScreenCaptureMethod { get; set; }
+        public ADropdown? D_ImageSize { get; set; }
         public ComboBoxItem? DDI_LGHUB { get; set; }
         public ComboBoxItem? DDI_RazerSynapse { get; set; }
         public ComboBoxItem? DDI_ddxoft { get; set; }
@@ -113,6 +117,9 @@ namespace Class
         public AToggle? T_UITopMost { get; set; }
         public APButton? B_SaveConfig { get; set; }
         public APButton? B_Debug { get; set; }
+        //--
+        public AToggle? T_StreamGuard { get; set; }
+        //--
 
         // X/Y Percentage Adjustment Enabler
         public ATitle? AT_XYPercentageAdjustmentEnabler { get; set; }

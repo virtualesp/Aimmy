@@ -18,7 +18,6 @@ namespace AILogic
         private bool _directXFailedPermanently = false; // Track if DirectX failed with unsupported error
         private bool _notificationShown = false; // Prevent spam notifications
 
-        private const int IMAGE_SIZE = 640;
         // Capturing
         public Bitmap? screenCaptureBitmap { get; private set; }
         private ID3D11Device? _dxDevice;
@@ -356,7 +355,7 @@ namespace AILogic
                     var map = _dxDevice.ImmediateContext.Map(_stagingTex, 0, MapMode.Read, Vortice.Direct3D11.MapFlags.None);
                     var boundsRect = new Rectangle(0, 0, w, h);
                     BitmapData? mapDest = currentBitmap.LockBits(boundsRect, ImageLockMode.WriteOnly, currentBitmap.PixelFormat);
-                    
+
                     try
                     {
                         unsafe
@@ -393,6 +392,27 @@ namespace AILogic
                                 _lastStrideMatch = strideMatch;
                                 _lastSrcStride = srcStride;
                                 _lastDstStride = dstStride;
+                            }
+
+                            if (Dictionary.toggleState["Third Person Support"])
+                            {
+                                int width = w / 2;
+                                int height = h / 2;
+                                int startY = h - height;
+
+                                byte* dstPtr = (byte*)mapDest.Scan0;
+                                for (int y = startY; y < h; y++)
+                                {
+                                    byte* rowPtr = dstPtr + (y * dstStride);
+                                    for (int x = 0; x < width; x++)
+                                    {
+                                        int pixelOffset = x * 4;
+                                        rowPtr[pixelOffset] = 0; // R
+                                        rowPtr[pixelOffset + 1] = 0; // G
+                                        rowPtr[pixelOffset + 2] = 0; // B
+                                        rowPtr[pixelOffset + 3] = 255; // A
+                                    }
+                                }
                             }
                         }
 
@@ -485,7 +505,22 @@ namespace AILogic
                         detectionBox.Size,
                         CopyPixelOperation.SourceCopy
                     );
+
+                    if (Dictionary.toggleState["Third Person Support"])
+                    {
+                        int width = screenCaptureBitmap.Width / 2;
+                        int height = screenCaptureBitmap.Height / 2;
+                        int startY = screenCaptureBitmap.Height - height;
+
+                        using (var brush = new SolidBrush(System.Drawing.Color.Black))
+                        {
+                            g.FillRectangle(brush, 0, startY, width, height);
+                        }
+                    }
                 }
+
+
+
                 return screenCaptureBitmap;
             }
             catch (Exception ex)

@@ -58,6 +58,7 @@ namespace Aimmy2.Class
             { "Anti Recoil", false },
             { "FOV", false },
             { "Dynamic FOV", false },
+            { "Third Person Support", false },
             { "Masking", false },
             { "Show Detected Player", false },
             { "Cursor Check", false },
@@ -72,6 +73,9 @@ namespace Aimmy2.Class
             { "Mouse Background Effect", true },
             { "Debug Mode", false },
             { "UI TopMost", false },
+            //--
+            { "StreamGuard", false },
+            //--
             { "X Axis Percentage Adjustment", false },
             { "Y Axis Percentage Adjustment", false }
         };
@@ -98,8 +102,10 @@ namespace Aimmy2.Class
             { "Aiming Boundaries Alignment", "Center" },
             { "Mouse Movement Method", "Mouse Event" },
             { "Screen Capture Method", "DirectX" },
-            { "Tracer Position", "Bottom" }
-
+            { "Tracer Position", "Bottom" },
+            { "Movement Path", "Cubic Bezier" },
+            { "Image Size", "640" },
+            { "Target Class", "Best Confidence" }
         };
 
         public static Dictionary<string, dynamic> colorState = new()

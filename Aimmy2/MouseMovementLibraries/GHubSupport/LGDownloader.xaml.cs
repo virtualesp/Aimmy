@@ -1,4 +1,5 @@
 ﻿using Aimmy2.Class;
+using Aimmy2.Theme;
 using Class;
 using Other;
 using System.Diagnostics;
@@ -24,6 +25,27 @@ namespace Visuality
         public LGDownloader()
         {
             InitializeComponent();
+
+            // Initialize theme colors
+            UpdateThemeColors();
+
+            // Subscribe to theme changes
+            ThemeManager.RegisterElement(this);
+            ThemeManager.ThemeChanged += OnThemeChanged;
+        }
+
+        private void OnThemeChanged(object sender, System.Windows.Media.Color newColor)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                UpdateThemeColors();
+            });
+        }
+
+        private void UpdateThemeColors()
+        {
+            // Update gradient colors
+            ThemeGradientStop.Color = ThemeManager.ThemeColorDark;
         }
 
         #region Window Controls
@@ -111,6 +133,14 @@ namespace Visuality
                     LogManager.Log(LogManager.LogLevel.Error, "File is improper, please try a different host.", true);
                 }
             }
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            // Unregister from theme manager
+            ThemeManager.ThemeChanged -= OnThemeChanged;
+            ThemeManager.UnregisterElement(this);
+            base.OnClosed(e);
         }
     }
 }

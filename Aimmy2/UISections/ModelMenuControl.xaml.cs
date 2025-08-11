@@ -1,15 +1,26 @@
-﻿using System.Diagnostics;
+﻿using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
+using Aimmy2.Class;
 using Aimmy2.UILibrary;
 using Other;
+using Visuality;
+using System.Security.Cryptography;
 
 namespace Aimmy2.Controls
 {
     public partial class ModelMenuControl : UserControl
     {
+        //--
+        private readonly HashSet<string> _modelFileHashes = new();
+        private readonly HashSet<string> _configFileHashes = new();
+        //--
         private MainWindow? _mainWindow;
         private bool _isInitialized = false;
         private bool _storeLoaded = false;
@@ -116,7 +127,7 @@ namespace Aimmy2.Controls
             {
                 await Dispatcher.InvokeAsync(() =>
                 {
-                    LogManager.Log(LogManager.LogLevel.Error, $"Failed to load store: {e.Message}", true);
+                    new NoticeBar($"Failed to load store: {e.Message}", 10000).Show();
 
                     // Show error in UI
                     ModelStoreScroller.Children.Clear();
@@ -172,12 +183,12 @@ namespace Aimmy2.Controls
                     }
                     else
                     {
-                        LogManager.Log(LogManager.LogLevel.Error, $"Directory not found: {path}", true);
+                        new NoticeBar($"Directory not found: {path}", 5000).Show();
                     }
                 }
                 catch (Exception ex)
                 {
-                    LogManager.Log(LogManager.LogLevel.Error, $"Failed to open folder: {ex.Message}", true);
+                    new NoticeBar($"Failed to open folder: {ex.Message}", 5000).Show();
                 }
             }
         }
@@ -192,13 +203,36 @@ namespace Aimmy2.Controls
             UpdateVisibilityBasedOnSearchText((TextBox)sender, ConfigStoreScroller);
         }
 
+        private void LocalModelSearchBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            FilterListBoxBySearch(ModelListBox, (TextBox)sender);
+        }
+
+        private void LocalConfigSearchBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            FilterListBoxBySearch(ConfigsListBox, (TextBox)sender);
+        }
+
+        private void FilterListBoxBySearch(ListBox listBox, TextBox searchBox)
+        {
+            string searchText = searchBox.Text?.ToLower() ?? "";
+
+            foreach (var item in listBox.Items)
+            {
+                if (listBox.ItemContainerGenerator.ContainerFromItem(item) is ListBoxItem listBoxItem)
+                {
+                    string contentText = item.ToString()?.ToLower() ?? "";
+                    listBoxItem.Visibility = contentText.Contains(searchText)
+                        ? Visibility.Visible
+                        : Visibility.Collapsed;
+                }
+            }
+        }
         private void UpdateVisibilityBasedOnSearchText(TextBox textBox, Panel panel)
         {
             if (panel.Children.Count == 0) return;
 
             string searchText = textBox.Text?.ToLower() ?? "";
-
-            // Use dispatcher for UI updates but with low priority
             Dispatcher.BeginInvoke(new Action(() =>
             {
                 foreach (var child in panel.Children)
@@ -211,5 +245,127 @@ namespace Aimmy2.Controls
                 }
             }), DispatcherPriority.Input);
         }
+
+        private void ModelListBox_DragOver(object sender, DragEventArgs e)
+        {
+            e.Handled = true;
+            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+            {
+                string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
+                bool valid = files.All(f => Path.GetExtension(f).Equals(".onnx", StringComparison.OrdinalIgnoreCase));
+                e.Effects = valid ? DragDropEffects.Copy : DragDropEffects.None;
+            }
+            else
+            {
+                e.Effects = DragDropEffects.None;
+            }
+        }
+
+        private void ModelListBox_Drop(object sender, DragEventArgs e)
+        {
+            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+            {
+                string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
+                string destDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "bin", "models");
+                Directory.CreateDirectory(destDir);
+
+                foreach (string file in files)
+                {
+                    if (!Path.GetExtension(file).Equals(".onnx", StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    string fileName = Path.GetFileName(file);
+                    string destPath = Path.Combine(destDir, fileName);
+
+                    if (File.Exists(destPath))
+                    {
+                        string duplicatePath = Path.Combine(destDir, Path.GetFileNameWithoutExtension(fileName) + "-DUPLICATED" + Path.GetExtension(fileName));
+                        File.Move(file, duplicatePath);
+                        new NoticeBar($"Duplicate model renamed: {Path.GetFileName(duplicatePath)}", 3000).Show();
+                        continue;
+                    }
+                    try
+                    {
+                        File.Move(file, destPath);
+
+                        var item = new ListBoxItem
+                        {
+                            Content = Path.GetFileName(destPath),
+                            Tag = destPath
+                        };
+
+                        ModelListBox.Items.Add(item);
+                        new NoticeBar($"Model moved: {Path.GetFileName(destPath)}", 3000).Show();
+                    }
+                    catch (Exception ex)
+                    {
+                        new NoticeBar($"Error moving model: {ex.Message}", 5000).Show();
+                    }
+                }
+            }
+        }
+
+        private void ConfigsListBox_DragOver(object sender, DragEventArgs e)
+        {
+            e.Handled = true;
+            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+            {
+                string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
+                bool valid = files.All(f => Path.GetExtension(f).Equals(".cfg", StringComparison.OrdinalIgnoreCase));
+                e.Effects = valid ? DragDropEffects.Copy : DragDropEffects.None;
+            }
+            else
+            {
+                e.Effects = DragDropEffects.None;
+            }
+        }
+
+
+        private void ConfigsListBox_Drop(object sender, DragEventArgs e)
+        {
+            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+            {
+                string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
+                string destDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "bin", "configs");
+                Directory.CreateDirectory(destDir);
+
+                foreach (string file in files)
+                {
+                    if (!Path.GetExtension(file).Equals(".cfg", StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    string fileName = Path.GetFileName(file);
+                    string destPath = Path.Combine(destDir, fileName);
+
+                    if (File.Exists(destPath))
+                    {
+                        string duplicatePath = Path.Combine(destDir, Path.GetFileNameWithoutExtension(fileName) + "-DUPLICATED" + Path.GetExtension(fileName));
+                        File.Move(file, duplicatePath);
+                        new NoticeBar($"Duplicate config renamed: {Path.GetFileName(duplicatePath)}", 3000).Show();
+                        continue;
+                    }
+
+                    try
+                    {
+                        File.Move(file, destPath);
+
+                        var item = new ListBoxItem
+                        {
+                            Content = Path.GetFileName(destPath),
+                            Tag = destPath
+                        };
+
+                        ConfigsListBox.Items.Add(item);
+                        new NoticeBar($"Config moved: {Path.GetFileName(destPath)}", 3000).Show();
+                    }
+                    catch (Exception ex)
+                    {
+                        new NoticeBar($"Error moving config: {ex.Message}", 5000).Show();
+                    }
+                }
+            }
+        }
+
+
     }
 }

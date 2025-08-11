@@ -1,9 +1,11 @@
-﻿using Aimmy2.Class;
+﻿using Aimmy2.AILogic;
+using Aimmy2.Class;
 using Aimmy2.MouseMovementLibraries.GHubSupport;
 using Aimmy2.UILibrary;
 using MouseMovementLibraries.ddxoftSupport;
 using MouseMovementLibraries.RazerSupport;
 using Other;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using UILibrary;
@@ -179,6 +181,83 @@ namespace Aimmy2.Controls
                     _mainWindow.AddDropdownItem(d, "DirectX");
                     _mainWindow.AddDropdownItem(d, "GDI+");
                 })
+                .AddDropdown("Image Size", d =>
+                {
+                    uiManager.D_ImageSize = d;
+
+                    // Add size options
+                    _mainWindow.AddDropdownItem(d, "640");
+                    _mainWindow.AddDropdownItem(d, "512");
+                    _mainWindow.AddDropdownItem(d, "416");
+                    _mainWindow.AddDropdownItem(d, "320");
+                    _mainWindow.AddDropdownItem(d, "256");
+                    _mainWindow.AddDropdownItem(d, "160");
+
+                    // Set default to current value
+                    var currentSize = Dictionary.dropdownState["Image Size"];
+                    for (int i = 0; i < d.DropdownBox.Items.Count; i++)
+                    {
+                        if ((d.DropdownBox.Items[i] as ComboBoxItem)?.Content?.ToString() == currentSize)
+                        {
+                            d.DropdownBox.SelectedIndex = i;
+                            break;
+                        }
+                    }
+
+                    // Handle selection change
+                    d.DropdownBox.SelectionChanged += async (s, e) =>
+                    {
+                        if (d.DropdownBox.SelectedItem == null || e.AddedItems.Count == 0)
+                            return;
+
+                        var newSize = (d.DropdownBox.SelectedItem as ComboBoxItem)?.Content?.ToString();
+                        if (string.IsNullOrEmpty(newSize))
+                            return;
+
+                        // Check if model is loaded
+                        if (FileManager.AIManager == null || Dictionary.lastLoadedModel == "N/A")
+                        {
+                            // No model loaded, just update the dictionary
+                            Dictionary.dropdownState["Image Size"] = newSize;
+                            LogManager.Log(LogLevel.Info, $"Image size set to {newSize}x{newSize} (no model loaded)", true, 2000);
+                            return;
+                        }
+
+                        FileManager.CurrentlyLoadingModel = true;
+                        LogManager.Log(LogLevel.Info, $"Image size changing to {newSize}");
+
+                        try
+                        {
+                            // Signal the AI to prepare for shutdown
+                            if (FileManager.AIManager != null)
+                            {
+                                FileManager.AIManager.RequestSizeChange(int.Parse(newSize));
+                                await Task.Delay(100); // Give AI loop time to pause
+                            }
+
+                            // Dispose the current AIManager
+                            var modelPath = System.IO.Path.Combine("bin/models", Dictionary.lastLoadedModel);
+                            FileManager.AIManager?.Dispose();
+                            FileManager.AIManager = null;
+
+                            // NOW it's safe to update the dictionary
+                            Dictionary.dropdownState["Image Size"] = newSize;
+
+                            // Create new AIManager with the new size
+                            FileManager.AIManager = new AIManager(modelPath);
+
+                            LogManager.Log(LogLevel.Info, $"Successfully changed image size to {newSize}x{newSize}", true, 2000);
+                        }
+                        catch (Exception ex)
+                        {
+                            LogManager.Log(LogLevel.Error, $"Error changing image size: {ex.Message}", true, 5000);
+                        }
+                        finally
+                        {
+                            FileManager.CurrentlyLoadingModel = false;
+                        }
+                    };
+                })
                 .AddSlider("AI Minimum Confidence", "% Confidence", 1, 1, 1, 100, s =>
                 {
                     uiManager.S_AIMinimumConfidence = s;
@@ -194,6 +273,7 @@ namespace Aimmy2.Controls
                 .AddToggle("Mouse Background Effect", t => uiManager.T_MouseBackgroundEffect = t)
                 .AddToggle("UI TopMost", t => uiManager.T_UITopMost = t)
                 .AddToggle("Debug Mode", t => uiManager.T_DebugMode = t)
+                .AddToggle("StreamGuard", t => uiManager.T_StreamGuard = t)
                 .AddButton("Save Config", b =>
                 {
                     uiManager.B_SaveConfig = b;
@@ -276,6 +356,11 @@ namespace Aimmy2.Controls
             // Handle ColorWheel separately as it's a custom control
             uiManager.ThemeColorWheel = new AColorWheel();
 
+            //--
+            var arrowButton = uiManager.ThemeColorWheel.FindName("ArrowButton") as Button;
+            arrowButton.Visibility = Visibility.Visible;
+            //--
+
             // Insert before separator
             var insertIndex = ThemeMenu.Children.Count - 2;
             ThemeMenu.Children.Insert(insertIndex, uiManager.ThemeColorWheel);
@@ -309,6 +394,22 @@ namespace Aimmy2.Controls
         {
             await Task.Delay(500);
             _mainWindow!.uiManager.D_MouseMovementMethod!.DropdownBox.SelectedIndex = 0;
+        }
+
+        public void UpdateImageSizeDropdown(string newSize)
+        {
+            if (_mainWindow?.uiManager.D_ImageSize != null)
+            {
+                var dropdown = _mainWindow.uiManager.D_ImageSize;
+                for (int i = 0; i < dropdown.DropdownBox.Items.Count; i++)
+                {
+                    if ((dropdown.DropdownBox.Items[i] as ComboBoxItem)?.Content?.ToString() == newSize)
+                    {
+                        dropdown.DropdownBox.SelectedIndex = i;
+                        break;
+                    }
+                }
+            }
         }
 
         public void Dispose()

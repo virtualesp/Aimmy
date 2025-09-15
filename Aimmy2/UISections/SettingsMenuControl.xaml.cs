@@ -177,7 +177,7 @@ namespace Aimmy2.Controls
                 .AddDropdown("Screen Capture Method", d =>
                 {
                     uiManager.D_ScreenCaptureMethod = d;
-                    d.DropdownBox.SelectedIndex = -1;  // Prevent auto-selection
+                    //d.DropdownBox.SelectedIndex = -1;  // Prevent auto-selection
                     _mainWindow.AddDropdownItem(d, "DirectX");
                     _mainWindow.AddDropdownItem(d, "GDI+");
                 })

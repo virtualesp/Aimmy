@@ -57,12 +57,38 @@ namespace MouseMovementLibraries.RazerSupport
                 await DownloadRzctl(rzctlDownloadUrl_Release);
                 return false;
             }
+            // Hopefully this method will solve the issue for the users who have/don't have the drivers
+            // If the user gets this error, Failed to initialize Razer mode, then it will attempt to download the Release version.
+            // And if that still doesn't work, then it will error again, which in this case would mean they don't have the driver for vs &&|| vc 2015–2022
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to initialize Razer mode.\n{ex.Message}\n\n" +
+                                "Attempting to replace rzctl.dll with the release version...",
+                                "Initialization Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                try
+                {
+                    if (File.Exists(rzctlpath))
+                        File.Delete(rzctlpath);
+
+                    await DownloadRzctl(rzctlDownloadUrl_Release);
+
+                    new NoticeBar("rzctl.dll replaced with release version. Please retry loading.", 5000).Show();
+                }
+                catch (Exception innerEx)
+                {
+                    MessageBox.Show($"Failed to recover rzctl.dll.\n{innerEx.Message}",
+                            "Recovery Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+                return false;
+            }
+            /* Commenting this method out to replace with a more enhanced version
             catch (Exception ex)
             {
                 MessageBox.Show($"Failed to initialize Razer mode.\n{ex.Message}",
                         "Initialization Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 return false;
             }
+            */
         }
         #region Razer Synapse & Device Checks
 

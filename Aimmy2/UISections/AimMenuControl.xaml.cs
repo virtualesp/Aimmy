@@ -171,9 +171,11 @@ namespace Aimmy2.Controls
                         }
                     };
                 })
+                .AddKeyChanger("Aim Assist TKB")
                 .AddKeyChanger("Aim Keybind", k => uiManager.C_Keybind = k)
                 .AddKeyChanger("Second Aim Keybind")
                 .AddToggle("Sticky Aim", t => uiManager.T_StickyAim = t)
+                .AddKeyChanger("Sticky Aim TKB")
                 .AddToggle("Constant AI Tracking", t =>
                 {
                     uiManager.T_ConstantAITracking = t;
@@ -194,8 +196,11 @@ namespace Aimmy2.Controls
                         }
                     };
                 })
+                .AddKeyChanger("Constant AI Tracking TKB")
                 .AddToggle("Predictions", t => uiManager.T_Predictions = t)
+                .AddKeyChanger("Predictions TKB")
                 .AddToggle("EMA Smoothening", t => uiManager.T_EMASmoothing = t)
+                .AddKeyChanger("EMA Smoothening TKB")
                 .AddKeyChanger("Emergency Stop Keybind", k => uiManager.C_EmergencyKeybind = k)
                 .AddToggle("Enable Model Switch Keybind", t => uiManager.T_EnableModelSwitchKeybind = t)
                 .AddKeyChanger("Model Switch Keybind", k => uiManager.C_ModelSwitchKeybind = k)
@@ -512,9 +517,10 @@ namespace Aimmy2.Controls
             {
                 d.DropdownBox.SelectedIndex = 0;
                 uiManager.D_TracerPosition = d;
-                _mainWindow.AddDropdownItem(d, "Bottom");
-                _mainWindow.AddDropdownItem(d, "Middle");
+                // Changed the positions of these as top is above middle & bottom - ts (this) bothered me so i had to
                 _mainWindow.AddDropdownItem(d, "Top");
+                _mainWindow.AddDropdownItem(d, "Middle");
+                _mainWindow.AddDropdownItem(d, "Bottom");
                 d.DropdownBox.SelectionChanged += (s, e) =>
                 {
                     if (Dictionary.toggleState["Show Detected Player"])

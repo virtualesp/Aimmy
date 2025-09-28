@@ -728,7 +728,14 @@ namespace Aimmy2
                 ["Anti Recoil Keybind"] = () => HandleAntiRecoil(true),
                 ["Disable Anti Recoil Keybind"] = DisableAntiRecoil,
                 ["Gun 1 Key"] = () => LoadGunConfig("Gun 1 Config"),
-                ["Gun 2 Key"] = () => LoadGunConfig("Gun 2 Config")
+                ["Gun 2 Key"] = () => LoadGunConfig("Gun 2 Config"),
+                // Keybinds for toggles
+                ["Aim Assist TKB"] = () => uiManager.T_AimAligner.Reader.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)),
+                ["Constant AI Tracking TKB"] = () => uiManager.T_ConstantAITracking.Reader.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)),
+                ["Predictions TKB"] = () => uiManager.T_Predictions.Reader.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)),
+                ["EMA Smoothening TKB"] = () => uiManager.T_EMASmoothing.Reader.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)),
+                ["Sticky Aim TKB"] = () => uiManager.T_StickyAim.Reader.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)),
+                ["Enable StreamGuard TKB"] = () => uiManager.T_StreamGuard.Reader.RaiseEvent(new RoutedEventArgs(Button.ClickEvent))
             };
 
             handlers.GetValueOrDefault(bindingId)?.Invoke();

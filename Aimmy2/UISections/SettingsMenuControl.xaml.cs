@@ -274,6 +274,7 @@ namespace Aimmy2.Controls
                 .AddToggle("UI TopMost", t => uiManager.T_UITopMost = t)
                 .AddToggle("Debug Mode", t => uiManager.T_DebugMode = t)
                 .AddToggle("StreamGuard", t => uiManager.T_StreamGuard = t)
+                .AddKeyChanger("Enable StreamGuard TKB")
                 .AddButton("Save Config", b =>
                 {
                     uiManager.B_SaveConfig = b;
@@ -447,6 +448,33 @@ namespace Aimmy2.Controls
             return toggle;
         }
 
+        //copied & Pasted from other class
+        private AKeyChanger CreateKeyChanger(string title, string keybind)
+        {
+            var keyChanger = new AKeyChanger(title, keybind);
+
+            keyChanger.Reader.Click += (sender, e) =>
+            {
+                keyChanger.KeyNotifier.Content = "...";
+                _mainWindow!.bindingManager.StartListeningForBinding(title);
+
+                Action<string, string>? bindingSetHandler = null;
+                bindingSetHandler = (bindingId, key) =>
+                {
+                    if (bindingId == title)
+                    {
+                        keyChanger.KeyNotifier.Content = KeybindNameManager.ConvertToRegularKey(key);
+                        Dictionary.bindingSettings[bindingId] = key;
+                        _mainWindow.bindingManager.OnBindingSet -= bindingSetHandler;
+                    }
+                };
+
+                _mainWindow.bindingManager.OnBindingSet += bindingSetHandler;
+            };
+
+            return keyChanger;
+        }
+
         private ASlider CreateSlider(string title, string label, double frequency, double buttonSteps,
             double min, double max)
         {
@@ -491,6 +519,16 @@ namespace Aimmy2.Controls
                 var toggle = _parent.CreateToggle(title);
                 configure?.Invoke(toggle);
                 _panel.Children.Add(toggle);
+                return this;
+            }
+
+            //copied & Pasted from other class
+            public SectionBuilder AddKeyChanger(string title, Action<AKeyChanger>? configure = null, string? defaultKey = null)
+            {
+                var key = defaultKey ?? Dictionary.bindingSettings[title];
+                var keyChanger = _parent.CreateKeyChanger(title, key);
+                configure?.Invoke(keyChanger);
+                _panel.Children.Add(keyChanger);
                 return this;
             }
 

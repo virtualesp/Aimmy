@@ -212,9 +212,9 @@ namespace Aimmy2.AILogic
                 EnableCpuMemArena = true,
                 EnableMemoryPattern = false,
                 GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL,
-                ExecutionMode = ExecutionMode.ORT_PARALLEL,
-                InterOpNumThreads = Environment.ProcessorCount,
-                IntraOpNumThreads = Environment.ProcessorCount
+                ExecutionMode = ExecutionMode.ORT_SEQUENTIAL,
+                InterOpNumThreads = 1,
+                IntraOpNumThreads = 4
             };
 
             // Attempt to load via DirectML (else fallback to CPU)
@@ -935,70 +935,79 @@ namespace Aimmy2.AILogic
 
             if (_onnxModel == null) return null;
 
+            IDisposableReadOnlyCollection<DisposableNamedOnnxValue>? results = null;
             Tensor<float>? outputTensor = null;
-            using (Benchmark("ModelInference"))
+
+            try
             {
-                using var results = _onnxModel.Run(_reusableInputs, _outputNames, _modeloptions);
-                outputTensor = results[0].AsTensor<float>();
-            }
-
-            if(outputTensor == null)
-            {
-                Log(LogLevel.Error, "Model inference returned null output tensor.", true, 2000);
-                SaveFrame(frame);
-                return null;
-            }
-
-            // Calculate the FOV boundaries
-            float FovSize = (float)Dictionary.sliderSettings["FOV Size"];
-            float fovMinX = (IMAGE_SIZE - FovSize) / 2.0f;
-            float fovMaxX = (IMAGE_SIZE + FovSize) / 2.0f;
-            float fovMinY = (IMAGE_SIZE - FovSize) / 2.0f;
-            float fovMaxY = (IMAGE_SIZE + FovSize) / 2.0f;
-
-            //List<double[]> KDpoints;
-            List<Prediction> KDPredictions;
-            using (Benchmark("PrepareKDTreeData"))
-            {
-                KDPredictions = PrepareKDTreeData(outputTensor, detectionBox, fovMinX, fovMaxX, fovMinY, fovMaxY);
-            }
-
-            if (KDPredictions.Count == 0)
-            {
-                SaveFrame(frame);
-                return null;
-            }
-
-            //kdtree was replaced with linear search
-            Prediction? bestCandidate = null;
-            double bestDistSq = double.MaxValue;
-            double center = IMAGE_SIZE / 2.0;
-
-            // TODO: Optimize this linear search further if needed
-            // TODO: Consider updating KD-Tree and adding options to switch from linear to kd.
-            // we can honestly replacing linear search by letting sticky aim handle the search
-            using (Benchmark("LinearSearch")) 
-            {
-                foreach (var p in KDPredictions)
+                using (Benchmark("ModelInference"))
                 {
-                    var dx = p.CenterXTranslated * IMAGE_SIZE - center;
-                    var dy = p.CenterYTranslated * IMAGE_SIZE - center;
-                    double d2 = dx * dx + dy * dy; // dx^2 + dy^2
-
-                    if (d2 < bestDistSq) { bestDistSq = d2; bestCandidate = p; }
+                    results = _onnxModel.Run(_reusableInputs, _outputNames, _modeloptions);
+                    outputTensor = results[0].AsTensor<float>();
                 }
-            }
 
-            Prediction? finalTarget = HandleStickyAim(bestCandidate, KDPredictions);
-            if (finalTarget != null)
+                if(outputTensor == null)
+                {
+                    Log(LogLevel.Error, "Model inference returned null output tensor.", true, 2000);
+                    SaveFrame(frame);
+                    return null;
+                }
+
+                // Calculate the FOV boundaries
+                float FovSize = (float)Dictionary.sliderSettings["FOV Size"];
+                float fovMinX = (IMAGE_SIZE - FovSize) / 2.0f;
+                float fovMaxX = (IMAGE_SIZE + FovSize) / 2.0f;
+                float fovMinY = (IMAGE_SIZE - FovSize) / 2.0f;
+                float fovMaxY = (IMAGE_SIZE + FovSize) / 2.0f;
+
+                //List<double[]> KDpoints;
+                List<Prediction> KDPredictions;
+                using (Benchmark("PrepareKDTreeData"))
+                {
+                    KDPredictions = PrepareKDTreeData(outputTensor, detectionBox, fovMinX, fovMaxX, fovMinY, fovMaxY);
+                }
+
+                if (KDPredictions.Count == 0)
+                {
+                    SaveFrame(frame);
+                    return null;
+                }
+
+                //kdtree was replaced with linear search
+                Prediction? bestCandidate = null;
+                double bestDistSq = double.MaxValue;
+                double center = IMAGE_SIZE / 2.0;
+
+                // TODO: Optimize this linear search further if needed
+                // TODO: Consider updating KD-Tree and adding options to switch from linear to kd.
+                // we can honestly replacing linear search by letting sticky aim handle the search
+                using (Benchmark("LinearSearch"))
+                {
+                    foreach (var p in KDPredictions)
+                    {
+                        var dx = p.CenterXTranslated * IMAGE_SIZE - center;
+                        var dy = p.CenterYTranslated * IMAGE_SIZE - center;
+                        double d2 = dx * dx + dy * dy; // dx^2 + dy^2
+
+                        if (d2 < bestDistSq) { bestDistSq = d2; bestCandidate = p; }
+                    }
+                }
+
+                Prediction? finalTarget = HandleStickyAim(bestCandidate, KDPredictions);
+                if (finalTarget != null)
+                {
+                    UpdateDetectionBox(finalTarget, detectionBox);
+                    SaveFrame(frame, finalTarget);
+                    return finalTarget;
+                }
+
+                frame.Dispose();
+                return null;
+            }
+            finally
             {
-                UpdateDetectionBox(finalTarget, detectionBox);
-                SaveFrame(frame, finalTarget);
-                return finalTarget;
+                results?.Dispose();
             }
-
-            frame.Dispose(); // Dispose the frame to free resources
-            return null;
         }
 
         // sticky aim needs to be refined

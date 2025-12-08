@@ -89,8 +89,8 @@ namespace AILogic
                     float* gPtr = dest + gOffset; //variables are arranged in RGB but its actually BGR.
                     float* bPtr = dest + bOffset;
 
-                    // process rows in parallel
-                    Parallel.For(0, height, (y) =>
+                    // process rows in parallel (avoid creating 640 threads)
+                    Parallel.For(0, height, new ParallelOptions { MaxDegreeOfParallelism = 4 }, (y) =>
                     {
                         byte* row = basePtr + (long)y * stride;
                         int rowStart = y * width;

@@ -88,8 +88,6 @@ namespace Aimmy2.AILogic
         private int detectedY { get; set; }
 
         public double AIConf = 0;
-        private static int targetX, targetY;
-
         // Pre-calculated values - now dynamic
         private float _scaleX => ScreenWidth / (float)IMAGE_SIZE;
         private float _scaleY => ScreenHeight / (float)IMAGE_SIZE;
@@ -863,35 +861,7 @@ namespace Aimmy2.AILogic
 
         private async Task<Prediction?> GetClosestPrediction(bool useMousePosition = true)
         {
-            //whats these variables for? - taylor 
-            //int adjustedTargetX, adjustedTargetY;
-
-            if (Dictionary.dropdownState["Detection Area Type"] == "Closest to Mouse")
-            {
-                var mousePos = WinAPICaller.GetCursorPosition();
-
-                // Check if mouse is on the current display
-                if (DisplayManager.IsPointInCurrentDisplay(new System.Windows.Point(mousePos.X, mousePos.Y)))
-                {
-                    // Mouse is on current display, use its position
-                    targetX = mousePos.X;
-                    targetY = mousePos.Y;
-                }
-                else
-                {
-                    // Mouse is on different display, use center of current display
-                    targetX = DisplayManager.ScreenLeft + (DisplayManager.ScreenWidth / 2);
-                    targetY = DisplayManager.ScreenTop + (DisplayManager.ScreenHeight / 2);
-                }
-            }
-            else
-            {
-                // Center of current display
-                targetX = DisplayManager.ScreenLeft + (DisplayManager.ScreenWidth / 2);
-                targetY = DisplayManager.ScreenTop + (DisplayManager.ScreenHeight / 2);
-            }
-
-            Rectangle detectionBox = new(targetX - IMAGE_SIZE / 2, targetY - IMAGE_SIZE / 2, IMAGE_SIZE, IMAGE_SIZE); // Detection box dynamic size
+            Rectangle detectionBox = CreateDetectionBox();
 
             Bitmap? frame;
 
@@ -1023,6 +993,32 @@ namespace Aimmy2.AILogic
                 frame.Dispose();
                 results?.Dispose();
             }
+        }
+
+        private Rectangle CreateDetectionBox()
+        {
+            string detectionAreaType = Dictionary.dropdownState["Detection Area Type"];
+            System.Drawing.Point mousePosition = default;
+            bool mouseOnCurrentDisplay = false;
+
+            if (detectionAreaType == "Closest to Mouse")
+            {
+                mousePosition = WinAPICaller.GetCursorPosition();
+                mouseOnCurrentDisplay = DisplayManager.IsPointInCurrentDisplay(new System.Windows.Point(mousePosition.X, mousePosition.Y));
+            }
+
+            var displayBounds = new Rectangle(
+                DisplayManager.ScreenLeft,
+                DisplayManager.ScreenTop,
+                DisplayManager.ScreenWidth,
+                DisplayManager.ScreenHeight);
+
+            return CaptureTargetSelector.SelectDetectionBox(
+                detectionAreaType,
+                IMAGE_SIZE,
+                displayBounds,
+                mousePosition,
+                mouseOnCurrentDisplay);
         }
 
         private void UpdateDetectionBox(Prediction target, Rectangle detectionBox)

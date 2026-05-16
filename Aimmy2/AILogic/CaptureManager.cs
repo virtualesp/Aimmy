@@ -227,7 +227,7 @@ namespace AILogic
                 _directXFailedPermanently = true;
                 DisposeDxgiResources();
 
-                Dictionary.dropdownState["Screen Capture Method"] = "GDI+";
+                AimSettings.ScreenCaptureMethod = "GDI+";
                 _currentCaptureMethod = "GDI+";
 
                 LogManager.Log(LogLevel.Error, "DirectX Desktop Duplication not supported on this system. Switched to GDI+ capture.", true, 6000);
@@ -389,7 +389,7 @@ namespace AILogic
                                 dst += dstStride;
                             }
 
-                            if (Dictionary.toggleState["Third Person Support"]) // a mask basically
+                            if (AimSettings.ThirdPersonSupport) // a mask basically
                             {
                                 int width = w / 2;
                                 int height = h / 2;
@@ -504,7 +504,7 @@ namespace AILogic
                         CopyPixelOperation.SourceCopy
                     );
 
-                    if (Dictionary.toggleState["Third Person Support"])
+                    if (AimSettings.ThirdPersonSupport)
                     {
                         int width = screenCaptureBitmap.Width / 2;
                         int height = screenCaptureBitmap.Height / 2;
@@ -530,12 +530,12 @@ namespace AILogic
 
         public Bitmap? ScreenGrab(Rectangle detectionBox)
         {
-            string selectedMethod = Dictionary.dropdownState["Screen Capture Method"];
+            string selectedMethod = AimSettings.ScreenCaptureMethod;
 
             // If DirectX failed permanently, force GDI+
             if (_directXFailedPermanently && selectedMethod == "DirectX")
             {
-                Dictionary.dropdownState["Screen Capture Method"] = "GDI+";
+                AimSettings.ScreenCaptureMethod = "GDI+";
                 selectedMethod = "GDI+";
                 _currentCaptureMethod = "GDI+";
             }

@@ -188,10 +188,10 @@ namespace Aimmy2.AILogic
         public AIManager(string modelPath)
         {
             // Initialize the cached image size
-            _currentImageSize = int.Parse(Dictionary.dropdownState["Image Size"]);
+            _currentImageSize = AimSettings.ImageSize;
 
             // Initialize DXGI capture for current display
-            if (Dictionary.dropdownState["Screen Capture Method"] == "DirectX")
+            if (AimSettings.ScreenCaptureMethod == "DirectX")
             {
                 _captureManager.InitializeDxgiDuplication();
             }
@@ -349,14 +349,14 @@ namespace Aimmy2.AILogic
                     NUM_DETECTIONS = CalculateNumDetections(fixedInputSize);
                     _currentImageSize = fixedInputSize;
 
-                    if (fixedInputSize != int.Parse(Dictionary.dropdownState["Image Size"]))
+                    if (fixedInputSize != AimSettings.ImageSize)
                     {
                         // Auto-adjust the image size to match the model
                         Log(LogLevel.Warning,
                             $"Fixed-size model expects {fixedInputSize}x{fixedInputSize}. Automatically adjusting Image Size setting.",
                             true, 3000);
 
-                        Dictionary.dropdownState["Image Size"] = fixedSizeStr;
+                        AimSettings.ImageSize = fixedInputSize;
 
                         // Update the UI dropdown if it exists
                         Application.Current?.Dispatcher.BeginInvoke(() =>
@@ -450,17 +450,17 @@ namespace Aimmy2.AILogic
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static bool ShouldPredict() =>
             AimProcessingDecisions.ShouldRunPrediction(
-                Dictionary.toggleState["Show Detected Player"],
-                Dictionary.toggleState["Constant AI Tracking"],
+                AimSettings.ShowDetectedPlayer,
+                AimSettings.ConstantAiTracking,
                 InputBindingManager.IsHoldingBinding("Aim Keybind"),
                 InputBindingManager.IsHoldingBinding("Second Aim Keybind"));
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static bool ShouldProcess() =>
             AimProcessingDecisions.ShouldProcessFrame(
-                Dictionary.toggleState["Aim Assist"],
-                Dictionary.toggleState["Show Detected Player"],
-                Dictionary.toggleState["Auto Trigger"]);
+                AimSettings.AimAssist,
+                AimSettings.ShowDetectedPlayer,
+                AimSettings.AutoTrigger);
 
         private async void AiLoop()
         {
@@ -549,24 +549,24 @@ namespace Aimmy2.AILogic
             // or if constant AI tracking is enabled,
             // we check for spray release and return
             if (!AimProcessingDecisions.ShouldAttemptAutoTrigger(
-                Dictionary.toggleState["Auto Trigger"],
+                AimSettings.AutoTrigger,
                 InputBindingManager.IsHoldingBinding("Aim Keybind"),
                 InputBindingManager.IsHoldingBinding("Second Aim Keybind"),
-                Dictionary.toggleState["Constant AI Tracking"]))
+                AimSettings.ConstantAiTracking))
             {
                 CheckSprayRelease();
                 return;
             }
 
 
-            if (Dictionary.toggleState["Spray Mode"])
+            if (AimSettings.SprayMode)
             {
                 await MouseManager.DoTriggerClick(LastDetectionBox);
                 return;
             }
 
 
-            if (Dictionary.toggleState["Cursor Check"])
+            if (AimSettings.CursorCheck)
             {
                 var mousePos = WinAPICaller.GetCursorPosition();
 
@@ -585,17 +585,17 @@ namespace Aimmy2.AILogic
                 await MouseManager.DoTriggerClick();
             }
 
-            if (!Dictionary.toggleState["Aim Assist"] || !Dictionary.toggleState["Show Detected Player"]) return;
+            if (!AimSettings.AimAssist || !AimSettings.ShowDetectedPlayer) return;
 
         }
         private void CheckSprayRelease()
         {
-            if (!Dictionary.toggleState["Spray Mode"]) return;
+            if (!AimSettings.SprayMode) return;
 
             // if auto trigger is disabled, we reset the spray state
             // if the aim keybinds are not held, we reset the spray state
             if (!AimProcessingDecisions.ShouldKeepSprayActive(
-                Dictionary.toggleState["Auto Trigger"],
+                AimSettings.AutoTrigger,
                 InputBindingManager.IsHoldingBinding("Aim Keybind"),
                 InputBindingManager.IsHoldingBinding("Second Aim Keybind")))
             {
@@ -605,7 +605,7 @@ namespace Aimmy2.AILogic
 
         private async void UpdateFOV()
         {
-            if (Dictionary.dropdownState["Detection Area Type"] == "Closest to Mouse" && Dictionary.toggleState["FOV"])
+            if (AimSettings.DetectionAreaType == "Closest to Mouse" && AimSettings.ShowFov)
             {
                 var mousePosition = WinAPICaller.GetCursorPosition();
 
@@ -629,16 +629,16 @@ namespace Aimmy2.AILogic
 
         private static void DisableOverlay(DetectedPlayerWindow DetectedPlayerOverlay)
         {
-            if (Dictionary.toggleState["Show Detected Player"] && Dictionary.DetectedPlayerOverlay != null)
+            if (AimSettings.ShowDetectedPlayer && Dictionary.DetectedPlayerOverlay != null)
             {
                 Application.Current.Dispatcher.Invoke(() =>
                 {
-                    if (Dictionary.toggleState["Show AI Confidence"])
+                    if (AimSettings.ShowAiConfidence)
                     {
                         DetectedPlayerOverlay!.DetectedPlayerConfidence.Opacity = 0;
                     }
 
-                    if (Dictionary.toggleState["Show Tracers"])
+                    if (AimSettings.ShowTracers)
                     {
                         DetectedPlayerOverlay!.DetectedTracers.Opacity = 0;
                     }
@@ -663,7 +663,7 @@ namespace Aimmy2.AILogic
 
             Application.Current.Dispatcher.Invoke(() =>
             {
-                if (Dictionary.toggleState["Show AI Confidence"])
+                if (AimSettings.ShowAiConfidence)
                 {
                     DetectedPlayerOverlay.DetectedPlayerConfidence.Opacity = 1;
                     DetectedPlayerOverlay.DetectedPlayerConfidence.Content = $"{closestPrediction.ClassName}: {Math.Round((AIConf * 100), 2)}%";
@@ -673,11 +673,11 @@ namespace Aimmy2.AILogic
                         centerX - labelEstimatedHalfWidth,
                         centerY - DetectedPlayerOverlay.DetectedPlayerConfidence.ActualHeight - 2, 0, 0);
                 }
-                var showTracers = Dictionary.toggleState["Show Tracers"];
+                var showTracers = AimSettings.ShowTracers;
                 DetectedPlayerOverlay.DetectedTracers.Opacity = showTracers ? 1 : 0;
                 if (showTracers)
                 {
-                    var tracerPosition = Dictionary.dropdownState["Tracer Position"];
+                    var tracerPosition = AimSettings.TracerPosition;
 
                     var boxTop = centerY;
                     var boxBottom = centerY + LastDetectionBox.Height;
@@ -722,7 +722,7 @@ namespace Aimmy2.AILogic
                     }
                 }
 
-                DetectedPlayerOverlay.Opacity = Dictionary.sliderSettings["Opacity"];
+                DetectedPlayerOverlay.Opacity = AimSettings.OverlayOpacity;
 
                 DetectedPlayerOverlay.DetectedPlayerFocus.Opacity = 1;
                 DetectedPlayerOverlay.DetectedPlayerFocus.Margin = new Thickness(
@@ -736,24 +736,24 @@ namespace Aimmy2.AILogic
         {
             AIConf = closestPrediction.Confidence;
 
-            if (Dictionary.toggleState["Show Detected Player"] && Dictionary.DetectedPlayerOverlay != null)
+            if (AimSettings.ShowDetectedPlayer && Dictionary.DetectedPlayerOverlay != null)
             {
                 using (Benchmark("UpdateOverlay"))
                 {
                     UpdateOverlay(DetectedPlayerOverlay!, closestPrediction);
                 }
-                if (!Dictionary.toggleState["Aim Assist"]) return;
+                if (!AimSettings.AimAssist) return;
             }
 
-            double YOffset = Dictionary.sliderSettings["Y Offset (Up/Down)"];
-            double XOffset = Dictionary.sliderSettings["X Offset (Left/Right)"];
+            double YOffset = AimSettings.YOffset;
+            double XOffset = AimSettings.XOffset;
 
-            double YOffsetPercentage = Dictionary.sliderSettings["Y Offset (%)"];
-            double XOffsetPercentage = Dictionary.sliderSettings["X Offset (%)"];
+            double YOffsetPercentage = AimSettings.YOffsetPercent;
+            double XOffsetPercentage = AimSettings.XOffsetPercent;
 
             var rect = closestPrediction.Rectangle;
 
-            if (Dictionary.toggleState["X Axis Percentage Adjustment"])
+            if (AimSettings.UseXAxisPercentageAdjustment)
             {
                 detectedX = (int)((rect.X + (rect.Width * (XOffsetPercentage / 100))) * scaleX);
             }
@@ -762,7 +762,7 @@ namespace Aimmy2.AILogic
                 detectedX = (int)((rect.X + rect.Width / 2) * scaleX + XOffset);
             }
 
-            if (Dictionary.toggleState["Y Axis Percentage Adjustment"])
+            if (AimSettings.UseYAxisPercentageAdjustment)
             {
                 detectedY = (int)((rect.Y + rect.Height - (rect.Height * (YOffsetPercentage / 100))) * scaleY + YOffset);
             }
@@ -779,7 +779,7 @@ namespace Aimmy2.AILogic
             float yBase = rect.Y;
             float yAdjustment = 0;
 
-            switch (Dictionary.dropdownState["Aiming Boundaries Alignment"])
+            switch (AimSettings.AimingBoundariesAlignment)
             {
                 case "Center":
                     yAdjustment = rect.Height / 2;
@@ -799,12 +799,12 @@ namespace Aimmy2.AILogic
 
         private void HandleAim(Prediction closestPrediction)
         {
-            if (Dictionary.toggleState["Aim Assist"] &&
-                (Dictionary.toggleState["Constant AI Tracking"] ||
-                 Dictionary.toggleState["Aim Assist"] && InputBindingManager.IsHoldingBinding("Aim Keybind") ||
-                 Dictionary.toggleState["Aim Assist"] && InputBindingManager.IsHoldingBinding("Second Aim Keybind")))
+            if (AimSettings.AimAssist &&
+                (AimSettings.ConstantAiTracking ||
+                 AimSettings.AimAssist && InputBindingManager.IsHoldingBinding("Aim Keybind") ||
+                 AimSettings.AimAssist && InputBindingManager.IsHoldingBinding("Second Aim Keybind")))
             {
-                if (Dictionary.toggleState["Predictions"])
+                if (AimSettings.Predictions)
                 {
                     HandlePredictions(kalmanPrediction, closestPrediction, detectedX, detectedY);
                 }
@@ -817,7 +817,7 @@ namespace Aimmy2.AILogic
 
         private void HandlePredictions(KalmanPrediction kalmanPrediction, Prediction closestPrediction, int detectedX, int detectedY)
         {
-            var predictionMethod = Dictionary.dropdownState["Prediction Method"];
+            var predictionMethod = AimSettings.PredictionMethod;
             switch (predictionMethod)
             {
                 case "Kalman Filter":
@@ -918,7 +918,7 @@ namespace Aimmy2.AILogic
                 }
 
                 // Calculate the FOV boundaries
-                float FovSize = (float)Dictionary.sliderSettings["FOV Size"];
+                float FovSize = (float)AimSettings.FovSize;
                 float fovMinX = (IMAGE_SIZE - FovSize) / 2.0f;
                 float fovMaxX = (IMAGE_SIZE + FovSize) / 2.0f;
                 float fovMinY = (IMAGE_SIZE - FovSize) / 2.0f;
@@ -928,8 +928,8 @@ namespace Aimmy2.AILogic
                 List<Prediction> KDPredictions;
                 using (Benchmark("PrepareKDTreeData"))
                 {
-                    float minConfidence = (float)Dictionary.sliderSettings["AI Minimum Confidence"] / 100.0f;
-                    string selectedClass = Dictionary.dropdownState["Target Class"];
+                    float minConfidence = AimSettings.MinimumConfidence;
+                    string selectedClass = AimSettings.TargetClass;
 
                     KDPredictions = PredictionFilter.CreatePredictions(
                         outputTensor,
@@ -973,8 +973,8 @@ namespace Aimmy2.AILogic
                 }
 
                 Prediction? finalTarget = _stickyAimSelector.SelectTarget(
-                    Dictionary.toggleState["Sticky Aim"],
-                    (float)Dictionary.sliderSettings["Sticky Aim Threshold"],
+                    AimSettings.StickyAim,
+                    (float)AimSettings.StickyAimThreshold,
                     IMAGE_SIZE,
                     bestCandidate,
                     KDPredictions);
@@ -997,7 +997,7 @@ namespace Aimmy2.AILogic
 
         private Rectangle CreateDetectionBox()
         {
-            string detectionAreaType = Dictionary.dropdownState["Detection Area Type"];
+            string detectionAreaType = AimSettings.DetectionAreaType;
             System.Drawing.Point mousePosition = default;
             bool mouseOnCurrentDisplay = false;
 
@@ -1041,10 +1041,10 @@ namespace Aimmy2.AILogic
         private void SaveFrame(Bitmap frame, Prediction? DoLabel = null)
         {
             // Only save frames if "Collect Data While Playing" is enabled
-            if (!Dictionary.toggleState["Collect Data While Playing"]) return;
+            if (!AimSettings.CollectDataWhilePlaying) return;
 
             // Skip if we're in constant tracking mode (unless auto-labeling is enabled)
-            if (Dictionary.toggleState["Constant AI Tracking"] && !Dictionary.toggleState["Auto Label Data"]) return;
+            if (AimSettings.ConstantAiTracking && !AimSettings.AutoLabelData) return;
 
             // Cooldown check
             if ((DateTime.Now - lastSavedTime).TotalMilliseconds < SAVE_FRAME_COOLDOWN_MS) return;
@@ -1066,7 +1066,7 @@ namespace Aimmy2.AILogic
                 // Save synchronously to avoid "Object is currently in use elsewhere" error
                 frame.Save(imagePath, ImageFormat.Jpeg);
 
-                if (Dictionary.toggleState["Auto Label Data"] && DoLabel != null)
+                if (AimSettings.AutoLabelData && DoLabel != null)
                 {
                     var labelPath = Path.Combine("bin", "labels", $"{uuid}.txt");
 

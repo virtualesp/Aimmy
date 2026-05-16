@@ -203,21 +203,22 @@ namespace Aimmy2.AILogic
 
             _modeloptions = new RunOptions();
 
-            var sessionOptions = OnnxModelSessionFactory.CreateDefaultOptions();
-
             // Attempt to load via DirectML (else fallback to CPU)
-            Task.Run(() => InitializeModel(sessionOptions, modelPath));
+            Task.Run(() => InitializeModel(modelPath));
         }
 
         #region Models
 
-        private async Task InitializeModel(SessionOptions sessionOptions, string modelPath)
+        private async Task InitializeModel(string modelPath)
         {
             using (Benchmark("ModelInitialization"))
             {
                 try
                 {
-                    await LoadModelAsync(sessionOptions, modelPath, useDirectML: true);
+                    if (!await LoadModelAsync(modelPath, useDirectML: true))
+                    {
+                        return;
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -225,41 +226,42 @@ namespace Aimmy2.AILogic
 
                     try
                     {
-                        await LoadModelAsync(sessionOptions, modelPath, useDirectML: false);
+                        await LoadModelAsync(modelPath, useDirectML: false);
                     }
                     catch (Exception e)
                     {
                         Log(LogLevel.Error, $"Error starting the model via CPU: {e.Message}, you won't be able to aim assist at all.", true);
                     }
                 }
-
-                FileManager.CurrentlyLoadingModel = false;
+                finally
+                {
+                    FileManager.CurrentlyLoadingModel = false;
+                }
             }
         }
 
-        private Task LoadModelAsync(SessionOptions sessionOptions, string modelPath, bool useDirectML)
+        private Task<bool> LoadModelAsync(string modelPath, bool useDirectML)
         {
             try
             {
-                OnnxModelLoadResult loadedModel = OnnxModelSessionFactory.Load(modelPath, sessionOptions, useDirectML);
+                OnnxModelLoadResult loadedModel = OnnxModelSessionFactory.Load(modelPath, useDirectML);
                 _onnxModel = loadedModel.Session;
                 _outputNames = loadedModel.OutputNames;
 
                 // Validate the onnx model output shape (ensure model is OnnxV8)
                 if (!ValidateOnnxShape())
                 {
-                    _onnxModel?.Dispose();
-                    return Task.CompletedTask;
+                    DisposeLoadedModel();
+                    return Task.FromResult(false);
                 }
 
                 // Pre-allocate bitmap buffer
                 _bitmapBuffer = new byte[3 * IMAGE_SIZE * IMAGE_SIZE];
             }
-            catch (Exception ex)
+            catch
             {
-                Log(LogLevel.Error, $"Error loading the model: {ex.Message}", true);
-                _onnxModel?.Dispose();
-                return Task.CompletedTask;
+                DisposeLoadedModel();
+                throw;
             }
 
             // Begin the loop
@@ -270,7 +272,14 @@ namespace Aimmy2.AILogic
                 Priority = ThreadPriority.AboveNormal // Higher priority for AI thread
             };
             _aiLoopThread.Start();
-            return Task.CompletedTask;
+            return Task.FromResult(true);
+        }
+
+        private void DisposeLoadedModel()
+        {
+            _onnxModel?.Dispose();
+            _onnxModel = null;
+            _outputNames = null;
         }
 
         private bool ValidateOnnxShape()

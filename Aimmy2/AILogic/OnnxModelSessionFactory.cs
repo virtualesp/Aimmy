@@ -17,13 +17,25 @@ namespace Aimmy2.AILogic
             };
         }
 
-        public static OnnxModelLoadResult Load(string modelPath, SessionOptions sessionOptions, bool useDirectML)
+        public static OnnxModelLoadResult Load(string modelPath, bool useDirectML)
         {
+            using SessionOptions sessionOptions = CreateDefaultOptions();
+
             if (useDirectML) { sessionOptions.AppendExecutionProvider_DML(); }
             else { sessionOptions.AppendExecutionProvider_CPU(); }
 
-            var session = new InferenceSession(modelPath, sessionOptions);
-            return new OnnxModelLoadResult(session, new List<string>(session.OutputMetadata.Keys));
+            InferenceSession? session = null;
+            try
+            {
+                session = new InferenceSession(modelPath, sessionOptions);
+                var result = new OnnxModelLoadResult(session, new List<string>(session.OutputMetadata.Keys));
+                session = null;
+                return result;
+            }
+            finally
+            {
+                session?.Dispose();
+            }
         }
     }
 

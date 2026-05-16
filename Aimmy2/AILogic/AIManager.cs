@@ -959,7 +959,22 @@ namespace Aimmy2.AILogic
                 List<Prediction> KDPredictions;
                 using (Benchmark("PrepareKDTreeData"))
                 {
-                    KDPredictions = PrepareKDTreeData(outputTensor, detectionBox, fovMinX, fovMaxX, fovMinY, fovMaxY);
+                    float minConfidence = (float)Dictionary.sliderSettings["AI Minimum Confidence"] / 100.0f;
+                    string selectedClass = Dictionary.dropdownState["Target Class"];
+
+                    KDPredictions = PredictionFilter.CreatePredictions(
+                        outputTensor,
+                        detectionBox,
+                        IMAGE_SIZE,
+                        NUM_DETECTIONS,
+                        NUM_CLASSES,
+                        _modelClasses,
+                        minConfidence,
+                        selectedClass,
+                        fovMinX,
+                        fovMaxX,
+                        fovMinY,
+                        fovMaxY);
                 }
 
                 if (KDPredictions.Count == 0)
@@ -1020,83 +1035,6 @@ namespace Aimmy2.AILogic
 
             CenterXTranslated = target.CenterXTranslated;
             CenterYTranslated = target.CenterYTranslated;
-        }
-        // is it really kdtreedata though....
-        private List<Prediction> PrepareKDTreeData(
-            Tensor<float> outputTensor,
-            Rectangle detectionBox,
-            float fovMinX, float fovMaxX, float fovMinY, float fovMaxY)
-        {
-            float minConfidence = (float)Dictionary.sliderSettings["AI Minimum Confidence"] / 100.0f;
-            string selectedClass = Dictionary.dropdownState["Target Class"];
-            int selectedClassId = selectedClass == "Best Confidence" ? -1 : _modelClasses.FirstOrDefault(c => c.Value == selectedClass).Key;
-
-            // we dont use kdpoints anymore because we replaced the kd-tree with a linear search
-            //var KDpoints = new List<double[]>(NUM_DETECTIONS); // Pre-allocate with estimated capacity
-            var KDpredictions = new List<Prediction>(NUM_DETECTIONS);
-
-            for (int i = 0; i < NUM_DETECTIONS; i++)
-            {
-                float x_center = outputTensor[0, 0, i];
-                float y_center = outputTensor[0, 1, i];
-                float width = outputTensor[0, 2, i];
-                float height = outputTensor[0, 3, i];
-
-                int bestClassId = 0;
-                float bestConfidence = 0f;
-
-                if (NUM_CLASSES == 1)
-                {
-                    bestConfidence = outputTensor[0, 4, i];
-                }
-                else
-                {
-                    if (selectedClassId == -1)
-                    {
-                        for (int classId = 0; classId < NUM_CLASSES; classId++)
-                        {
-                            float classConfidence = outputTensor[0, 4 + classId, i];
-                            if (classConfidence > bestConfidence)
-                            {
-                                bestConfidence = classConfidence;
-                                bestClassId = classId;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        bestConfidence = outputTensor[0, 4 + selectedClassId, i];
-                        bestClassId = selectedClassId;
-                    }
-                }
-
-                if (bestConfidence < minConfidence) continue;
-
-                float x_min = x_center - width / 2;
-                float y_min = y_center - height / 2;
-                float x_max = x_center + width / 2;
-                float y_max = y_center + height / 2;
-
-                if (x_min < fovMinX || x_max > fovMaxX || y_min < fovMinY || y_max > fovMaxY) continue;
-
-                RectangleF rect = new(x_min, y_min, width, height);
-                Prediction prediction = new()
-                {
-                    Rectangle = rect,
-                    Confidence = bestConfidence,
-                    ClassId = bestClassId,
-                    ClassName = _modelClasses.GetValueOrDefault(bestClassId, $"Class_{bestClassId}"),
-                    CenterXTranslated = x_center / IMAGE_SIZE,
-                    CenterYTranslated = y_center / IMAGE_SIZE,
-                    ScreenCenterX = detectionBox.Left + x_center,
-                    ScreenCenterY = detectionBox.Top + y_center
-                };
-
-                //KDpoints.Add(new double[] { x_center, y_center });
-                KDpredictions.Add(prediction);
-            }
-
-            return KDpredictions;
         }
 
         #endregion AI Loop Functions

@@ -4,7 +4,7 @@ namespace Aimmy2.AILogic
 {
     internal static class OnnxModelSessionFactory
     {
-        public static SessionOptions CreateDefaultOptions()
+        private static SessionOptions CreateDefaultOptions()
         {
             return new SessionOptions
             {
@@ -17,7 +17,7 @@ namespace Aimmy2.AILogic
             };
         }
 
-        public static OnnxModelLoadResult Load(string modelPath, bool useDirectML)
+        internal static OnnxModelLoadResult Load(string modelPath, bool useDirectML)
         {
             using SessionOptions sessionOptions = CreateDefaultOptions();
 

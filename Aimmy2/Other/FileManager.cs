@@ -37,15 +37,6 @@ namespace Other
             ModelListBox.SelectionChanged += ModelListBox_SelectionChanged;
             ConfigListBox.SelectionChanged += ConfigListBox_SelectionChanged;
 
-            ModelListBox.AllowDrop = true;
-            ModelListBox.DragOver += ModelListBox_DragOver;
-            ModelListBox.Drop += ModelListBox_DragDrop;
-
-            ConfigListBox.AllowDrop = true;
-            ConfigListBox.DragOver += ConfigListBox_DragDrop;
-            ConfigListBox.Drop += ConfigListBox_DragDrop;
-
-
             CheckForRequiredFolders();
             InitializeFileWatchers();
             LoadModelsIntoListBox(null, null);
@@ -123,6 +114,7 @@ namespace Other
             string selectedConfig = ConfigListBox.SelectedItem.ToString()!;
 
             string configPath = Path.Combine("bin/configs", selectedConfig);
+            Dictionary.lastLoadedConfig = selectedConfig;
 
             SaveDictionary.LoadJSON(Dictionary.sliderSettings, configPath);
             PropertyChanger.PostNewConfig(configPath, true);
@@ -161,71 +153,6 @@ namespace Other
             }
         }
 
-        private void ModelListBox_DragOver(object sender, DragEventArgs e)
-        {
-            if (e.Data.GetDataPresent(DataFormats.FileDrop))
-            {
-                e.Effects = DragDropEffects.Copy;
-            }
-            else
-            {
-                e.Effects = DragDropEffects.None;
-            }
-
-            e.Handled = true;
-        }
-
-        private void ModelListBox_DragDrop(object sender, DragEventArgs e)
-        {
-            if (e.Data.GetDataPresent(DataFormats.FileDrop))
-            {
-                string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
-                string targetFolder = "bin/models";
-
-                foreach (var file in files)
-                {
-                    if (Path.GetExtension(file) == ".onnx")
-                    {
-                        string fileName = Path.GetFileName(file);
-                        string destFile = Path.Combine(targetFolder, fileName);
-                        File.Move(file, destFile, true);
-                    }
-                }
-            }
-        }
-        private void ConfigListBox_DragOver(object sender, DragEventArgs e)
-        {
-            if (e.Data.GetDataPresent(DataFormats.FileDrop))
-            {
-                e.Effects = DragDropEffects.Copy;
-            }
-            else
-            {
-                e.Effects = DragDropEffects.None;
-            }
-
-            e.Handled = true;
-        }
-
-        private void ConfigListBox_DragDrop(object sender, DragEventArgs e)
-        {
-            if (e.Data.GetDataPresent(DataFormats.FileDrop))
-            {
-                string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
-                string targetFolder = "bin/models";
-
-                foreach (var file in files)
-                {
-                    if (Path.GetExtension(file) == ".cfg")
-                    {
-                        string fileName = Path.GetFileName(file);
-                        string destFile = Path.Combine(targetFolder, fileName);
-                        File.Move(file, destFile, true);
-                    }
-                }
-            }
-        }
-
         public void LoadModelsIntoListBox(object? sender, FileSystemEventArgs? e)
         {
             if (!InQuittingState)
@@ -243,7 +170,7 @@ namespace Other
                     if (ModelListBox.Items.Count > 0)
                     {
                         string? lastLoadedModel = Dictionary.lastLoadedModel;
-                        if (lastLoadedModel != "N/A" && !ModelListBox.Items.Contains(lastLoadedModel)) { ModelListBox.SelectedItem = lastLoadedModel; }
+                        if (lastLoadedModel != "N/A" && ModelListBox.Items.Contains(lastLoadedModel)) { ModelListBox.SelectedItem = lastLoadedModel; }
                         SelectedModelNotifier.Content = $"Loaded Model: {lastLoadedModel}";
                     }
                 });
@@ -267,7 +194,7 @@ namespace Other
                     if (ConfigListBox.Items.Count > 0)
                     {
                         string? lastLoadedConfig = Dictionary.lastLoadedConfig;
-                        if (lastLoadedConfig != "N/A" && !ConfigListBox.Items.Contains(lastLoadedConfig)) { ConfigListBox.SelectedItem = lastLoadedConfig; }
+                        if (lastLoadedConfig != "N/A" && ConfigListBox.Items.Contains(lastLoadedConfig)) { ConfigListBox.SelectedItem = lastLoadedConfig; }
 
                         SelectedConfigNotifier.Content = "Loaded Config: " + lastLoadedConfig;
                     }

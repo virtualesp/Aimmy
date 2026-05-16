@@ -90,7 +90,7 @@ namespace AILogic
             double currentY = _y + _vy * dt;
 
             // Get base lead time from settings
-            double leadTime = (double)Dictionary.sliderSettings["Kalman Lead Time"];
+            double leadTime = AimSettings.KalmanLeadTime;
 
             // Dynamically adjust based on mouse speed if available
             if (mouseSpeed > 0.0)
@@ -191,7 +191,7 @@ namespace AILogic
         public WTFDetection GetEstimatedPosition()
         {
             // Get lead time from settings
-            double leadTime = (double)Dictionary.sliderSettings["WiseTheFox Lead Time"];
+            double leadTime = AimSettings.WiseTheFoxLeadTime;
 
             // Predict where target will be after lead time
             double predictedX = _emaX + _velocityX * leadTime;
@@ -267,7 +267,7 @@ namespace AILogic
             }
 
             // Get lead multiplier from settings
-            double leadMultiplier = (double)Dictionary.sliderSettings["Shalloe Lead Multiplier"];
+            double leadMultiplier = AimSettings.ShalloeLeadMultiplier;
 
             // Calculate average velocity
             double avgVelocity = _velocityXHistory.Average();
@@ -284,7 +284,7 @@ namespace AILogic
             }
 
             // Get lead multiplier from settings
-            double leadMultiplier = (double)Dictionary.sliderSettings["Shalloe Lead Multiplier"];
+            double leadMultiplier = AimSettings.ShalloeLeadMultiplier;
 
             // Calculate average velocity
             double avgVelocity = _velocityYHistory.Average();

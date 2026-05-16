@@ -35,7 +35,7 @@ namespace InputLogic
         // Cleanup
         private static (Action down, Action up) GetMouseActions()
         {
-            string mouseMovementMethod = Dictionary.dropdownState["Mouse Movement Method"];
+            string mouseMovementMethod = AimSettings.MouseMovementMethod;
             Action mouseDownAction;
             Action mouseUpAction;
 
@@ -76,9 +76,9 @@ namespace InputLogic
             }
 
 
-            if (Dictionary.toggleState["Spray Mode"])
+            if (AimSettings.SprayMode)
             {
-                if (Dictionary.toggleState["Cursor Check"])
+                if (AimSettings.CursorCheck)
                 {
                     Point mousePos = WinAPICaller.GetCursorPosition();
 
@@ -95,7 +95,7 @@ namespace InputLogic
 
             // Single click logic if spray mode off
             int timeSinceLastClick = (int)(DateTime.UtcNow - LastClickTime).TotalMilliseconds;
-            int triggerDelayMilliseconds = (int)(Dictionary.sliderSettings["Auto Trigger Delay"] * 1000);
+            int triggerDelayMilliseconds = AimSettings.AutoTriggerDelayMilliseconds;
             const int clickDelayMilliseconds = 20;
 
             if (timeSinceLastClick < triggerDelayMilliseconds && LastClickTime != DateTime.MinValue)
@@ -150,7 +150,7 @@ namespace InputLogic
 
             double aspectRatioCorrection = ScreenWidth / ScreenHeight;
 
-            int MouseJitter = (int)Dictionary.sliderSettings["Mouse Jitter"];
+            int MouseJitter = AimSettings.MouseJitter;
             int jitterX = MouseRandom.Next(-MouseJitter, MouseJitter);
             int jitterY = MouseRandom.Next(-MouseJitter, MouseJitter);
 
@@ -158,27 +158,27 @@ namespace InputLogic
             Point end = new(targetX, targetY);
             Point newPosition = new Point(0, 0);
 
-            switch (Dictionary.dropdownState["Movement Path"])
+            switch (AimSettings.MovementPath)
             {
                 case "Cubic Bezier":
                     Point control1 = new Point(start.X + (end.X - start.X) / 3, start.Y + (end.Y - start.Y) / 3);
                     Point control2 = new Point(start.X + 2 * (end.X - start.X) / 3, start.Y + 2 * (end.Y - start.Y) / 3);
-                    newPosition = MovementPaths.CubicBezier(start, end, control1, control2, 1 - Dictionary.sliderSettings["Mouse Sensitivity (+/-)"]);
+                    newPosition = MovementPaths.CubicBezier(start, end, control1, control2, 1 - AimSettings.MouseSensitivity);
                     break;
                 case "Linear":
-                    newPosition = MovementPaths.Lerp(start, end, 1 - Dictionary.sliderSettings["Mouse Sensitivity (+/-)"]);
+                    newPosition = MovementPaths.Lerp(start, end, 1 - AimSettings.MouseSensitivity);
                     break;
                 case "Exponential":
-                    newPosition = MovementPaths.Exponential(start, end, 1 - (Dictionary.sliderSettings["Mouse Sensitivity (+/-)"] - 0.2), 3.0);
+                    newPosition = MovementPaths.Exponential(start, end, 1 - (AimSettings.MouseSensitivity - 0.2), 3.0);
                     break;
                 case "Adaptive":
-                    newPosition = MovementPaths.Adaptive(start, end, 1 - Dictionary.sliderSettings["Mouse Sensitivity (+/-)"]);
+                    newPosition = MovementPaths.Adaptive(start, end, 1 - AimSettings.MouseSensitivity);
                     break;
                 case "Perlin Noise":
-                    newPosition = MovementPaths.PerlinNoise(start, end, 1 - Dictionary.sliderSettings["Mouse Sensitivity (+/-)"], 20, 0.5);
+                    newPosition = MovementPaths.PerlinNoise(start, end, 1 - AimSettings.MouseSensitivity, 20, 0.5);
                     break;
                 default:
-                    newPosition = MovementPaths.Lerp(start, end, 1 - Dictionary.sliderSettings["Mouse Sensitivity (+/-)"]);
+                    newPosition = MovementPaths.Lerp(start, end, 1 - AimSettings.MouseSensitivity);
                     break;
             }
 
@@ -196,7 +196,7 @@ namespace InputLogic
             newPosition.X += jitterX;
             newPosition.Y += jitterY;
 
-            switch (Dictionary.dropdownState["Mouse Movement Method"])
+            switch (AimSettings.MouseMovementMethod)
             {
                 case "SendInput":
                     SendInputMouse.SendMouseCommand(MOUSEEVENTF_MOVE, newPosition.X, newPosition.Y);
@@ -222,7 +222,7 @@ namespace InputLogic
             previousX = newPosition.X;
             previousY = newPosition.Y;
 
-            if (!Dictionary.toggleState["Auto Trigger"])
+            if (!AimSettings.AutoTrigger)
             {
                 ResetSprayState();
             }

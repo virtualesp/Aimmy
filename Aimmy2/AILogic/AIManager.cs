@@ -203,15 +203,7 @@ namespace Aimmy2.AILogic
 
             _modeloptions = new RunOptions();
 
-            var sessionOptions = new SessionOptions
-            {
-                EnableCpuMemArena = true,
-                EnableMemoryPattern = false,
-                GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL,
-                ExecutionMode = ExecutionMode.ORT_SEQUENTIAL,
-                InterOpNumThreads = 1,
-                IntraOpNumThreads = 4
-            };
+            var sessionOptions = OnnxModelSessionFactory.CreateDefaultOptions();
 
             // Attempt to load via DirectML (else fallback to CPU)
             Task.Run(() => InitializeModel(sessionOptions, modelPath));
@@ -249,11 +241,9 @@ namespace Aimmy2.AILogic
         {
             try
             {
-                if (useDirectML) { sessionOptions.AppendExecutionProvider_DML(); }
-                else { sessionOptions.AppendExecutionProvider_CPU(); }
-
-                _onnxModel = new InferenceSession(modelPath, sessionOptions);
-                _outputNames = new List<string>(_onnxModel.OutputMetadata.Keys);
+                OnnxModelLoadResult loadedModel = OnnxModelSessionFactory.Load(modelPath, sessionOptions, useDirectML);
+                _onnxModel = loadedModel.Session;
+                _outputNames = loadedModel.OutputNames;
 
                 // Validate the onnx model output shape (ensure model is OnnxV8)
                 if (!ValidateOnnxShape())

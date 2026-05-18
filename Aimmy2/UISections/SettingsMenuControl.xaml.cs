@@ -14,6 +14,7 @@ namespace Aimmy2.Controls
     {
         private MainWindow? _mainWindow;
         private bool _isInitialized;
+        private bool _suppressImageSizeSelectionChanged;
 
         // Local minimize state management
         private readonly Dictionary<string, bool> _localMinimizeState = new()
@@ -173,6 +174,9 @@ namespace Aimmy2.Controls
                     // Handle selection change
                     d.DropdownBox.SelectionChanged += async (s, e) =>
                     {
+                        if (_suppressImageSizeSelectionChanged)
+                            return;
+
                         if (d.DropdownBox.SelectedItem == null || e.AddedItems.Count == 0)
                             return;
 
@@ -180,50 +184,18 @@ namespace Aimmy2.Controls
                         if (string.IsNullOrEmpty(newSize))
                             return;
 
-                        // Check if model is loaded
-                        if (FileManager.AIManager == null || Dictionary.lastLoadedModel == "N/A")
-                        {
-                            // No model loaded, just update the dictionary
-                            Dictionary.dropdownState["Image Size"] = newSize;
-                            LogManager.Log(LogLevel.Info, $"Image size set to {newSize}x{newSize} (no model loaded)", true, 2000);
-                            return;
-                        }
-
-                        FileManager.CurrentlyLoadingModel = true;
-                        LogManager.Log(LogLevel.Info, $"Image size changing to {newSize}");
-
-                        try
-                        {
-                            // Signal the AI to prepare for shutdown
-                            if (FileManager.AIManager != null)
-                            {
-                                FileManager.AIManager.RequestSizeChange(int.Parse(newSize));
-                                await Task.Delay(100); // Give AI loop time to pause
-                            }
-
-                            // Dispose the current AIManager
-                            var modelPath = System.IO.Path.Combine("bin/models", Dictionary.lastLoadedModel);
-                            FileManager.AIManager?.Dispose();
-                            FileManager.AIManager = null;
-
-                            // NOW it's safe to update the dictionary
-                            Dictionary.dropdownState["Image Size"] = newSize;
-
-                            // Create new AIManager with the new size
-                            FileManager.AIManager = new AIManager(modelPath);
-
-                            LogManager.Log(LogLevel.Info, $"Successfully changed image size to {newSize}x{newSize}", true, 2000);
-                        }
-                        catch (Exception ex)
-                        {
-                            LogManager.Log(LogLevel.Error, $"Error changing image size: {ex.Message}", true, 5000);
-                        }
-                        finally
-                        {
-                            FileManager.CurrentlyLoadingModel = false;
-                        }
+                        await _mainWindow!.ChangeImageSizeAsync(newSize);
                     };
                 }, tooltip: "Resolution the AI uses for detection. Smaller = faster but less accurate.")
+                .AddSlider("AI FPS Limit", "FPS", 5, 5, 0, 240, s =>
+                {
+                    uiManager.S_AIFpsLimit = s;
+                    s.SetValueFormatter(value => value <= 0 ? "Unlimited" : $"{value:F0} FPS");
+                }, tooltip: "Caps the AI loop to reduce CPU/GPU load. 0 keeps Aimmy running at full speed.")
+                .AddButton("Run Performance Helper", b =>
+                {
+                    b.Reader.Click += (s, e) => _mainWindow!.ShowPerformanceHelper();
+                }, tooltip: "Open the performance helper again for the currently loaded model.")
                 .AddDropdown("Target Class", d =>
                 {
                     d.DropdownBox.SelectedIndex = 0;
@@ -387,18 +359,26 @@ namespace Aimmy2.Controls
             _mainWindow!.uiManager.D_MouseMovementMethod!.DropdownBox.SelectedIndex = 0;
         }
 
-        public void UpdateImageSizeDropdown(string newSize)
+        public void UpdateImageSizeDropdown(string newSize, bool suppressSelectionChanged = true)
         {
             if (_mainWindow?.uiManager.D_ImageSize != null)
             {
                 var dropdown = _mainWindow.uiManager.D_ImageSize;
-                for (int i = 0; i < dropdown.DropdownBox.Items.Count; i++)
+                _suppressImageSizeSelectionChanged = suppressSelectionChanged;
+                try
                 {
-                    if ((dropdown.DropdownBox.Items[i] as ComboBoxItem)?.Content?.ToString() == newSize)
+                    for (int i = 0; i < dropdown.DropdownBox.Items.Count; i++)
                     {
-                        dropdown.DropdownBox.SelectedIndex = i;
-                        break;
+                        if ((dropdown.DropdownBox.Items[i] as ComboBoxItem)?.Content?.ToString() == newSize)
+                        {
+                            dropdown.DropdownBox.SelectedIndex = i;
+                            break;
+                        }
                     }
+                }
+                finally
+                {
+                    _suppressImageSizeSelectionChanged = false;
                 }
             }
         }
@@ -614,7 +594,8 @@ namespace Aimmy2.Controls
 
             public SectionBuilder AddButton(string title, Action<APButton>? configure = null, string? tooltip = null)
             {
-                var button = new APButton(title, tooltip);
+                string icon = title == "Run Performance Helper" ? "\uE768" : "\uE8B0";
+                var button = new APButton(title, tooltip, icon);
                 configure?.Invoke(button);
                 _panel.Children.Add(button);
                 return this;

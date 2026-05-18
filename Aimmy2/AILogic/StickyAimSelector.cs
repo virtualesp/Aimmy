@@ -154,7 +154,7 @@ namespace Aimmy2.AILogic
             _lastTargetVelocityY = _lastTargetVelocityY * smoothing + newVelY * newWeight;
         }
 
-        private void Reset()
+        internal void Reset()
         {
             _currentTarget = null;
             _consecutiveFramesWithoutTarget = 0;

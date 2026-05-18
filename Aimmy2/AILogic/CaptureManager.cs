@@ -239,7 +239,7 @@ namespace AILogic
                 throw;
             }
         }
-        private Bitmap? DirectX(Rectangle detectionBox)
+        private Bitmap? DirectX(Rectangle detectionBox, bool allowStaleCache = false)
         {
             int w = detectionBox.Width;
             int h = detectionBox.Height;
@@ -268,7 +268,7 @@ namespace AILogic
                     if (_dxDevice == null || _dxDevice.ImmediateContext == null || _deskDuplication == null)
                     {
                         lock (_displayLock) { _displayChangesPending = true; }
-                        return GetCachedFrame(detectionBox);
+                        return GetCachedFrame(detectionBox, allowStaleCache);
                     }
                 }
 
@@ -305,7 +305,7 @@ namespace AILogic
                 {
                     // No new frame available - this is normal
                     _consecutiveFailures = 0; // Reset failure counter
-                    return GetCachedFrame(detectionBox);
+                    return GetCachedFrame(detectionBox, allowStaleCache);
                 }
                 else if (result == Vortice.DXGI.ResultCode.DeviceRemoved || result == Vortice.DXGI.ResultCode.AccessLost)
                 { // Device lost - need to reinitialize
@@ -314,13 +314,13 @@ namespace AILogic
                     if (_consecutiveFailures >= MAX_CONSECUTIVE_FAILURES)
                         lock (_displayLock) { _displayChangesPending = true; }
 
-                    return GetCachedFrame(detectionBox);
+                    return GetCachedFrame(detectionBox, allowStaleCache);
                 }
                 else if (result != Result.Ok)
                 {
                     // Other error
                     _consecutiveFailures++;
-                    return GetCachedFrame(detectionBox);
+                    return GetCachedFrame(detectionBox, allowStaleCache);
                 }
 
                 frameAcquired = true;
@@ -362,7 +362,7 @@ namespace AILogic
                     else
                     {
                         LogManager.Log(LogLevel.Warning, "No visible region to copy from DirectX capture.", true, 3000);
-                        return GetCachedFrame(detectionBox);
+                        return GetCachedFrame(detectionBox, allowStaleCache);
                     }
 
                     #endregion
@@ -432,7 +432,7 @@ namespace AILogic
                 if (++_consecutiveFailures >= MAX_CONSECUTIVE_FAILURES)
                     lock (_displayLock) { _displayChangesPending = true; }
 
-                return GetCachedFrame(detectionBox);
+                return GetCachedFrame(detectionBox, allowStaleCache);
             }
             finally
             {
@@ -465,11 +465,11 @@ namespace AILogic
         }
 
 
-        private Bitmap? GetCachedFrame(Rectangle detectionBox)
+        private Bitmap? GetCachedFrame(Rectangle detectionBox, bool allowStaleCache = false)
         {
             if (_cachedFrame != null &&
                 _cachedFrameBounds.Equals(detectionBox) &&
-                DateTime.Now - _lastFrameTime <= _frameCacheTimeout)
+                (allowStaleCache || DateTime.Now - _lastFrameTime <= _frameCacheTimeout))
             {
                 return (Bitmap)_cachedFrame.Clone();
             }
@@ -528,7 +528,7 @@ namespace AILogic
         }
         #endregion
 
-        public Bitmap? ScreenGrab(Rectangle detectionBox)
+        public Bitmap? ScreenGrab(Rectangle detectionBox, bool allowStaleCache = false)
         {
             string selectedMethod = AimSettings.ScreenCaptureMethod;
 
@@ -566,7 +566,7 @@ namespace AILogic
 
             if (selectedMethod == "DirectX" && !_directXFailedPermanently)
             {
-                return DirectX(detectionBox);
+                return DirectX(detectionBox, allowStaleCache);
             }
             else
             {

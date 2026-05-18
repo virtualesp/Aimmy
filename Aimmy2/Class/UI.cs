@@ -83,6 +83,7 @@ namespace Class
 
         // Model Settings
         public ATitle? AT_ModelSettings { get; set; }
+        public ASlider? S_AIFpsLimit { get; set; }
 
         // Settings UI
         public ATitle? AT_SettingsMenu { get; set; }

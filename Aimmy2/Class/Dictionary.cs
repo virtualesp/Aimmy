@@ -21,6 +21,7 @@ namespace Aimmy2.Class
         public static Dictionary<string, dynamic> sliderSettings = new()
         {
             { "Suggested Model", ""},
+            { "AI FPS Limit", 0 },
             { "FOV Size", 640 },
             { "Dynamic FOV Size", 200 },
             { "Mouse Sensitivity (+/-)", 0.80 },

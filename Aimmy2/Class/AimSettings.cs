@@ -38,6 +38,7 @@ namespace Aimmy2.Class
         public static double KalmanLeadTime => GetSlider("Kalman Lead Time");
         public static double WiseTheFoxLeadTime => GetSlider("WiseTheFox Lead Time");
         public static double ShalloeLeadMultiplier => GetSlider("Shalloe Lead Multiplier");
+        public static int AiFpsLimit => Math.Max(0, (int)Math.Round(GetSlider("AI FPS Limit")));
 
         public static bool AutoTrigger => GetToggle("Auto Trigger");
         public static bool ConstantAiTracking => GetToggle("Constant AI Tracking");

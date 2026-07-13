@@ -1,4 +1,4 @@
-﻿<Window x:Class="Visuality.NoticeBar"
+<Window x:Class="Visuality.NoticeBar"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -17,102 +17,104 @@
         Topmost="True">
 
     <Window.Resources>
-        <!-- Single item template for notices -->
+        <!-- Notice item template -->
         <DataTemplate x:Key="NoticeTemplate">
-            <Grid x:Name="NoticeItemContainer"
-                  Margin="0,0,0,15"
-                  RenderTransformOrigin="0.5,0.5"
-                  CacheMode="BitmapCache">
-                <Grid.RenderTransform>
-                    <TransformGroup>
-                        <ScaleTransform ScaleX="1" ScaleY="1"/>
-                        <TranslateTransform X="0" Y="0"/>
-                    </TransformGroup>
-                </Grid.RenderTransform>
-
-                <!-- Simplified shadow using gradient instead of blur -->
-                <Border CornerRadius="10"
-                        Margin="2,2,2,-2"
-                        Opacity="0.3">
-                    <Border.Background>
-                        <RadialGradientBrush>
-                            <GradientStop Color="#FF000000" Offset="0"/>
-                            <GradientStop Color="#00000000" Offset="1"/>
-                        </RadialGradientBrush>
-                    </Border.Background>
-                </Border>
-
-                <!-- Main notice border -->
-                <Border MinHeight="50"
+            <Grid Margin="0,0,0,12">
+                <!-- Main notice card -->
+                <Border MinHeight="48"
+                        MinWidth="280"
                         MaxWidth="500"
-                        CornerRadius="10"
+                        CornerRadius="12"
                         BorderThickness="1"
-                        BorderBrush="{Binding BorderBrush}">
-
-                    <!-- Simplified background -->
+                        BorderBrush="#3FFFFFFF"
+                        Padding="0">
                     <Border.Background>
                         <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                            <GradientStop Color="#E6000000" Offset="0"/>
+                            <GradientStop Color="#FF101010" Offset="0"/>
                             <GradientStop Color="{Binding ThemeColorMid}" Offset="0.5"/>
                             <GradientStop Color="{Binding ThemeColorEnd}" Offset="1"/>
                         </LinearGradientBrush>
                     </Border.Background>
 
-                    <!-- Content grid -->
-                    <Grid Margin="15,12,15,12">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
 
-                        <!-- Simplified icon -->
-                        <Path Grid.Column="0"
-                              Fill="{Binding IconColor}"
-                              Data="{Binding IconData}"
-                              Stretch="Uniform"
-                              Width="16"
-                              Height="16"
-                              Margin="0,0,12,0"
-                              VerticalAlignment="Center"/>
+                        <!-- Content area -->
+                        <Grid Grid.Row="0" Margin="16,14,16,14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
 
-                        <!-- Message text -->
-                        <TextBlock Grid.Column="1"
-                                   Text="{Binding Message}"
-                                   Foreground="#FFFFFFFF"
-                                   VerticalAlignment="Center"
-                                   FontSize="13"
-                                   FontFamily="Segoe UI"
-                                   FontWeight="Normal"
-                                   TextWrapping="Wrap"
-                                   LineHeight="18"/>
-
-                        <!-- Progress bar -->
-                        <Border Grid.Column="2"
-                                Width="50"
-                                Height="3"
-                                Margin="12,0,0,0"
-                                CornerRadius="1.5"
-                                Background="#1AFFFFFF"
-                                VerticalAlignment="Center">
-                            <Border x:Name="ProgressBar"
-                                    CornerRadius="1.5"
-                                    HorizontalAlignment="Left"
-                                    Width="50">
-                                <Border.Background>
-                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                        <GradientStop Color="{Binding ThemeColorMid}" Offset="0"/>
-                                        <GradientStop Color="{Binding ThemeColorLight}" Offset="1"/>
-                                    </LinearGradientBrush>
-                                </Border.Background>
+                            <!-- Icon with colored background -->
+                            <Border Grid.Column="0"
+                                    Width="32"
+                                    Height="32"
+                                    CornerRadius="8"
+                                    Background="{Binding IconBackground}"
+                                    Margin="0,0,14,0"
+                                    VerticalAlignment="Top">
+                                <Path Fill="White"
+                                      Data="{Binding IconData}"
+                                      Stretch="Uniform"
+                                      Width="16"
+                                      Height="16"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"/>
                             </Border>
+
+                            <!-- Message content -->
+                            <Grid Grid.Column="1" VerticalAlignment="Center">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <!-- Type label -->
+                                <TextBlock Grid.Row="0"
+                                           Text="{Binding TypeLabel}"
+                                           Foreground="{Binding IconColor}"
+                                           FontSize="11"
+                                           FontWeight="SemiBold"
+                                           FontFamily="Segoe UI"
+                                           Margin="0,0,0,4"/>
+
+                                <!-- Message text with scroll for long content -->
+                                <ScrollViewer Grid.Row="1"
+                                              MaxHeight="120"
+                                              VerticalScrollBarVisibility="Auto"
+                                              HorizontalScrollBarVisibility="Disabled">
+                                    <TextBlock Text="{Binding Message}"
+                                               Foreground="#DDFFFFFF"
+                                               FontSize="13"
+                                               FontFamily="Segoe UI"
+                                               FontWeight="Normal"
+                                               TextWrapping="Wrap"
+                                               LineHeight="20"/>
+                                </ScrollViewer>
+                            </Grid>
+                        </Grid>
+
+                        <!-- Progress bar at bottom -->
+                        <Border Grid.Row="1"
+                                Height="3"
+                                CornerRadius="0,0,12,12"
+                                Background="#15FFFFFF"
+                                ClipToBounds="True">
+                            <Border x:Name="ProgressBar"
+                                    HorizontalAlignment="Left"
+                                    CornerRadius="0,0,0,12"
+                                    Background="#99FFFFFF"/>
                         </Border>
                     </Grid>
                 </Border>
             </Grid>
         </DataTemplate>
 
-        <!-- Item container style for animations -->
+        <!-- Item container style -->
         <Style x:Key="NoticeItemStyle" TargetType="ListBoxItem">
             <Setter Property="Template">
                 <Setter.Value>
@@ -121,40 +123,13 @@
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
-            <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
-            <Setter Property="RenderTransform">
-                <Setter.Value>
-                    <TransformGroup>
-                        <ScaleTransform ScaleX="0.9" ScaleY="0.9"/>
-                        <TranslateTransform X="80" Y="0"/>
-                    </TransformGroup>
-                </Setter.Value>
-            </Setter>
             <Setter Property="Opacity" Value="0"/>
             <Style.Triggers>
                 <EventTrigger RoutedEvent="Loaded">
                     <BeginStoryboard>
                         <Storyboard>
                             <DoubleAnimation Storyboard.TargetProperty="Opacity"
-                                             From="0" To="1" Duration="0:0:0.25"/>
-                            <DoubleAnimation Storyboard.TargetProperty="RenderTransform.Children[0].ScaleX"
-                                             From="0.9" To="1" Duration="0:0:0.25">
-                                <DoubleAnimation.EasingFunction>
-                                    <CubicEase EasingMode="EaseOut"/>
-                                </DoubleAnimation.EasingFunction>
-                            </DoubleAnimation>
-                            <DoubleAnimation Storyboard.TargetProperty="RenderTransform.Children[0].ScaleY"
-                                             From="0.9" To="1" Duration="0:0:0.25">
-                                <DoubleAnimation.EasingFunction>
-                                    <CubicEase EasingMode="EaseOut"/>
-                                </DoubleAnimation.EasingFunction>
-                            </DoubleAnimation>
-                            <DoubleAnimation Storyboard.TargetProperty="RenderTransform.Children[1].X"
-                                             From="80" To="0" Duration="0:0:0.25">
-                                <DoubleAnimation.EasingFunction>
-                                    <CubicEase EasingMode="EaseOut"/>
-                                </DoubleAnimation.EasingFunction>
-                            </DoubleAnimation>
+                                             From="0" To="1" Duration="0:0:0.2"/>
                         </Storyboard>
                     </BeginStoryboard>
                 </EventTrigger>
@@ -163,7 +138,6 @@
     </Window.Resources>
 
     <Grid>
-        <!-- Single container for all notices -->
         <ListBox x:Name="NoticesContainer"
                  VerticalAlignment="Bottom"
                  HorizontalAlignment="Center"
@@ -174,7 +148,7 @@
                  IsHitTestVisible="False"
                  ItemTemplate="{StaticResource NoticeTemplate}"
                  ItemContainerStyle="{StaticResource NoticeItemStyle}"
-                 Margin="0,0,0,200">
+                 Margin="0,0,0,180">
             <ListBox.ItemsPanel>
                 <ItemsPanelTemplate>
                     <StackPanel/>

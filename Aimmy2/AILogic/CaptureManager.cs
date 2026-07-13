@@ -227,7 +227,7 @@ namespace AILogic
                 _directXFailedPermanently = true;
                 DisposeDxgiResources();
 
-                Dictionary.dropdownState["Screen Capture Method"] = "GDI+";
+                AimSettings.ScreenCaptureMethod = "GDI+";
                 _currentCaptureMethod = "GDI+";
 
                 LogManager.Log(LogLevel.Error, "DirectX Desktop Duplication not supported on this system. Switched to GDI+ capture.", true, 6000);
@@ -239,7 +239,7 @@ namespace AILogic
                 throw;
             }
         }
-        private Bitmap? DirectX(Rectangle detectionBox)
+        private Bitmap? DirectX(Rectangle detectionBox, bool allowStaleCache = false)
         {
             int w = detectionBox.Width;
             int h = detectionBox.Height;
@@ -268,7 +268,7 @@ namespace AILogic
                     if (_dxDevice == null || _dxDevice.ImmediateContext == null || _deskDuplication == null)
                     {
                         lock (_displayLock) { _displayChangesPending = true; }
-                        return GetCachedFrame(detectionBox);
+                        return GetCachedFrame(detectionBox, allowStaleCache);
                     }
                 }
 
@@ -305,7 +305,7 @@ namespace AILogic
                 {
                     // No new frame available - this is normal
                     _consecutiveFailures = 0; // Reset failure counter
-                    return GetCachedFrame(detectionBox);
+                    return GetCachedFrame(detectionBox, allowStaleCache);
                 }
                 else if (result == Vortice.DXGI.ResultCode.DeviceRemoved || result == Vortice.DXGI.ResultCode.AccessLost)
                 { // Device lost - need to reinitialize
@@ -314,13 +314,13 @@ namespace AILogic
                     if (_consecutiveFailures >= MAX_CONSECUTIVE_FAILURES)
                         lock (_displayLock) { _displayChangesPending = true; }
 
-                    return GetCachedFrame(detectionBox);
+                    return GetCachedFrame(detectionBox, allowStaleCache);
                 }
                 else if (result != Result.Ok)
                 {
                     // Other error
                     _consecutiveFailures++;
-                    return GetCachedFrame(detectionBox);
+                    return GetCachedFrame(detectionBox, allowStaleCache);
                 }
 
                 frameAcquired = true;
@@ -362,7 +362,7 @@ namespace AILogic
                     else
                     {
                         LogManager.Log(LogLevel.Warning, "No visible region to copy from DirectX capture.", true, 3000);
-                        return GetCachedFrame(detectionBox);
+                        return GetCachedFrame(detectionBox, allowStaleCache);
                     }
 
                     #endregion
@@ -389,7 +389,7 @@ namespace AILogic
                                 dst += dstStride;
                             }
 
-                            if (Dictionary.toggleState["Third Person Support"]) // a mask basically
+                            if (AimSettings.ThirdPersonSupport) // a mask basically
                             {
                                 int width = w / 2;
                                 int height = h / 2;
@@ -432,7 +432,7 @@ namespace AILogic
                 if (++_consecutiveFailures >= MAX_CONSECUTIVE_FAILURES)
                     lock (_displayLock) { _displayChangesPending = true; }
 
-                return GetCachedFrame(detectionBox);
+                return GetCachedFrame(detectionBox, allowStaleCache);
             }
             finally
             {
@@ -465,11 +465,11 @@ namespace AILogic
         }
 
 
-        private Bitmap? GetCachedFrame(Rectangle detectionBox)
+        private Bitmap? GetCachedFrame(Rectangle detectionBox, bool allowStaleCache = false)
         {
             if (_cachedFrame != null &&
                 _cachedFrameBounds.Equals(detectionBox) &&
-                DateTime.Now - _lastFrameTime <= _frameCacheTimeout)
+                (allowStaleCache || DateTime.Now - _lastFrameTime <= _frameCacheTimeout))
             {
                 return (Bitmap)_cachedFrame.Clone();
             }
@@ -504,7 +504,7 @@ namespace AILogic
                         CopyPixelOperation.SourceCopy
                     );
 
-                    if (Dictionary.toggleState["Third Person Support"])
+                    if (AimSettings.ThirdPersonSupport)
                     {
                         int width = screenCaptureBitmap.Width / 2;
                         int height = screenCaptureBitmap.Height / 2;
@@ -515,9 +515,10 @@ namespace AILogic
                     }
                 }
 
-
-
-                return screenCaptureBitmap;
+                // Clone the bitmap to avoid race conditions with Sticky Aim / SaveFrame
+                // The source bitmap is reused, so returning it directly can cause crashes
+                // if the caller is still using it when the next frame capture starts
+                return (Bitmap)screenCaptureBitmap.Clone();
             }
             catch (Exception ex)
             {
@@ -527,14 +528,14 @@ namespace AILogic
         }
         #endregion
 
-        public Bitmap? ScreenGrab(Rectangle detectionBox)
+        public Bitmap? ScreenGrab(Rectangle detectionBox, bool allowStaleCache = false)
         {
-            string selectedMethod = Dictionary.dropdownState["Screen Capture Method"];
+            string selectedMethod = AimSettings.ScreenCaptureMethod;
 
             // If DirectX failed permanently, force GDI+
             if (_directXFailedPermanently && selectedMethod == "DirectX")
             {
-                Dictionary.dropdownState["Screen Capture Method"] = "GDI+";
+                AimSettings.ScreenCaptureMethod = "GDI+";
                 selectedMethod = "GDI+";
                 _currentCaptureMethod = "GDI+";
             }
@@ -565,7 +566,7 @@ namespace AILogic
 
             if (selectedMethod == "DirectX" && !_directXFailedPermanently)
             {
-                return DirectX(detectionBox);
+                return DirectX(detectionBox, allowStaleCache);
             }
             else
             {

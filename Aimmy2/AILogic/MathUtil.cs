@@ -1,6 +1,4 @@
 ﻿using Aimmy2.AILogic;
-using System;
-using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Runtime.CompilerServices;
@@ -25,6 +23,40 @@ namespace AILogic
             float dx = a.ScreenCenterX - b.ScreenCenterX;
             float dy = a.ScreenCenterY - b.ScreenCenterY;
             return dx * dx + dy * dy;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static float CalculateTargetScore(
+            Prediction candidate,
+            Prediction? currentTarget,
+            float predictedX,
+            float predictedY,
+            float currentLockScore,
+            float maxLockScore,
+            float threshold)
+        {
+            // Base score from distance to predicted position (where we expect current target to be)
+            float dx = candidate.ScreenCenterX - predictedX;
+            float dy = candidate.ScreenCenterY - predictedY;
+            float distSq = dx * dx + dy * dy;
+
+            // Normalize distance score (0 = far, 1 = close)
+            float thresholdSq = threshold * threshold;
+            float distanceScore = Math.Max(0f, 1f - (distSq / thresholdSq));
+
+            // Confidence bonus (0-0.3 range)
+            float confidenceBonus = candidate.Confidence * 0.3f;
+
+            // Size bonus - larger targets are more stable (0-0.2 range)
+            float area = candidate.Rectangle.Width * candidate.Rectangle.Height;
+            float sizeBonus = Math.Min(0.2f, area / 50000f);
+
+            // Lock bonus for current target (0-0.5 range based on accumulated score)
+            float lockBonus = (currentTarget != null && distanceScore > 0.3f)
+                ? (currentLockScore / maxLockScore) * 0.5f
+                : 0f;
+
+            return distanceScore + confidenceBonus + sizeBonus + lockBonus;
         }
         public static int CalculateNumDetections(int imageSize)
         {

@@ -15,23 +15,13 @@ namespace Aimmy2.Class
             { "Second Aim Keybind", "LMenu"},
             { "Dynamic FOV Keybind", "Left"},
             { "Emergency Stop Keybind", "Delete"},
-            { "Model Switch Keybind", "OemPipe"},
-            { "Anti Recoil Keybind", "Left"},
-            { "Disable Anti Recoil Keybind", "Oem6"},
-            { "Gun 1 Key", "D1"},
-            { "Gun 2 Key", "D2"},
-            // Key binds for toggles
-            { "Aim Assist TKB", ""},
-            { "Constant AI Tracking TKB", ""},
-            { "Predictions TKB", ""},
-            { "EMA Smoothening TKB", ""},
-            { "Sticky Aim TKB", ""},
-            { "Enable StreamGuard TKB", ""}
+            { "Model Switch Keybind", "OemPipe"}
         };
 
         public static Dictionary<string, dynamic> sliderSettings = new()
         {
             { "Suggested Model", ""},
+            { "AI FPS Limit", 0 },
             { "FOV Size", 640 },
             { "Dynamic FOV Size", 200 },
             { "Mouse Sensitivity (+/-)", 0.80 },
@@ -42,6 +32,9 @@ namespace Aimmy2.Class
             { "X Offset (Left/Right)", 0 },
             { "X Offset (%)", 50 },
             { "EMA Smoothening", 0.5},
+            { "Kalman Lead Time", 0.10 },
+            { "WiseTheFox Lead Time", 0.15 },
+            { "Shalloe Lead Multiplier", 3.0 },
             { "Auto Trigger Delay", 0.1 },
             { "AI Minimum Confidence", 45 },
             { "AI Confidence Font Size", 20 },
@@ -60,9 +53,7 @@ namespace Aimmy2.Class
             { "Predictions", false },
             { "EMA Smoothening", false },
             { "Enable Model Switch Keybind", true },
-            { "Enable Gun Switching Keybind", false },
             { "Auto Trigger", false },
-            { "Anti Recoil", false },
             { "FOV", false },
             { "Dynamic FOV", false },
             { "Third Person Support", false },
@@ -91,15 +82,15 @@ namespace Aimmy2.Class
         {
             { "Aim Assist", false },
             { "Aim Config", false },
+            { "Predictions", false },
             { "Auto Trigger", false },
-            { "Anti Recoil", false},
-            { "Anti Recoil Config", false },
             { "FOV Config", false },
             { "ESP Config", false },
+            { "Model Settings", false },
             { "Settings Menu", false },
             { "X/Y Percentage Adjustment", false },
             { "Theme Settings", false },
-            { "Display Settings", false}
+            { "Screen Settings", false}
         };
 
         public static Dictionary<string, dynamic> dropdownState = new()
@@ -122,19 +113,9 @@ namespace Aimmy2.Class
             { "Theme Color", "#FF722ED1" }
         };
 
-        public static Dictionary<string, dynamic> AntiRecoilSettings = new()
-        {
-            { "Hold Time", 10 },
-            { "Fire Rate", 200 },
-            { "Y Recoil (Up/Down)", 10 },
-            { "X Recoil (Left/Right)", 0 }
-        };
-
         public static Dictionary<string, dynamic> filelocationState = new()
         {
-            { "ddxoft DLL Location", ""},
-            { "Gun 1 Config", "" },
-            { "Gun 2 Config", "" }
+            { "ddxoft DLL Location", ""}
         };
     }
 }

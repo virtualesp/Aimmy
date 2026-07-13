@@ -19,15 +19,15 @@ namespace Other
         {
             if (notifyUser)
             {
-               Application.Current.Dispatcher.Invoke(() =>
-               {
-                   new NoticeBar(message, waitingTime).Show();
-               });
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    new NoticeBar(message, waitingTime).Show();
+                });
             }
 #if DEBUG
             Debug.WriteLine(message);
 #endif
-            if(Dictionary.toggleState["Debug Mode"])
+            if (Dictionary.toggleState["Debug Mode"])
             {
                 string logFilepath = "debug.txt";
                 using StreamWriter w = new(logFilepath, true);

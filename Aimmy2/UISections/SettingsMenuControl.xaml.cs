@@ -1,11 +1,7 @@
 ﻿using Aimmy2.AILogic;
 using Aimmy2.Class;
-using Aimmy2.MouseMovementLibraries.GHubSupport;
 using Aimmy2.UILibrary;
-using MouseMovementLibraries.ddxoftSupport;
-using MouseMovementLibraries.RazerSupport;
 using Other;
-using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using UILibrary;
@@ -18,19 +14,20 @@ namespace Aimmy2.Controls
     {
         private MainWindow? _mainWindow;
         private bool _isInitialized;
+        private bool _suppressImageSizeSelectionChanged;
 
         // Local minimize state management
         private readonly Dictionary<string, bool> _localMinimizeState = new()
         {
+            { "Model Settings", false },
             { "Settings Menu", false },
-            { "X/Y Percentage Adjustment", false },
             { "Theme Settings", false },
-            { "Display Settings", false }
+            { "Screen Settings", false }
         };
 
         // Public properties for MainWindow access
+        public StackPanel ModelSettingsPanel => ModelSettings;
         public StackPanel SettingsConfigPanel => SettingsConfig;
-        public StackPanel XYPercentageEnablerMenuPanel => XYPercentageEnablerMenu;
         public StackPanel ThemeMenuPanel => ThemeMenu;
         public StackPanel DisplaySelectMenuPanel => DisplaySelectMenu;
         public ScrollViewer SettingsMenuScrollViewer => SettingsMenu;
@@ -50,8 +47,8 @@ namespace Aimmy2.Controls
             // Load minimize states from global dictionary if they exist
             LoadMinimizeStatesFromGlobal();
 
+            LoadModelSettings();
             LoadSettingsConfig();
-            LoadXYPercentageMenu();
             LoadThemeMenu();
             LoadDisplaySelectMenu();
 
@@ -60,6 +57,16 @@ namespace Aimmy2.Controls
 
             // Subscribe to display changes
             DisplayManager.DisplayChanged += OnDisplayChanged;
+
+            // Subscribe to AI class updates for Target Class dropdown
+            AIManager.ClassesUpdated += OnClassesChanged;
+
+            // Subscribe to dynamic model status changes
+            AIManager.DynamicModelStatusChanged += OnDynamicModelStatusChanged;
+
+            // Set visibility based on current model status (handles case where model loaded before panel opened)
+            UpdateDynamicModelDropdownsVisibility(AIManager.CurrentModelIsDynamic);
+            UpdateTargetClassDropdown(_mainWindow!.uiManager.D_TargetClass!);
         }
 
         #region Minimize State Management
@@ -85,10 +92,10 @@ namespace Aimmy2.Controls
 
         private void ApplyMinimizeStates()
         {
+            ApplyPanelState("Model Settings", ModelSettingsPanel);
             ApplyPanelState("Settings Menu", SettingsConfigPanel);
-            ApplyPanelState("X/Y Percentage Adjustment", XYPercentageEnablerMenuPanel);
             ApplyPanelState("Theme Settings", ThemeMenuPanel);
-            ApplyPanelState("Display Settings", DisplaySelectMenuPanel);
+            ApplyPanelState("Screen Settings", DisplaySelectMenuPanel);
         }
 
         private void ApplyPanelState(string stateName, StackPanel panel)
@@ -130,56 +137,16 @@ namespace Aimmy2.Controls
 
         #region Menu Section Loaders
 
-        private void LoadSettingsConfig()
+        private void LoadModelSettings()
         {
             var uiManager = _mainWindow!.uiManager;
-            var builder = new SectionBuilder(this, SettingsConfig);
+            var builder = new SectionBuilder(this, ModelSettings);
 
             builder
-                .AddTitle("Settings Menu", true, t =>
+                .AddTitle("Model Settings", true, t =>
                 {
-                    uiManager.AT_SettingsMenu = t;
-                    t.Minimize.Click += (s, e) => TogglePanel("Settings Menu", SettingsConfigPanel);
-                })
-                .AddToggle("Collect Data While Playing", t => uiManager.T_CollectDataWhilePlaying = t)
-                .AddToggle("Auto Label Data", t => uiManager.T_AutoLabelData = t)
-                .AddDropdown("Mouse Movement Method", d =>
-                {
-                    uiManager.D_MouseMovementMethod = d;
-                    d.DropdownBox.SelectedIndex = -1;  // Prevent auto-selection
-
-                    // Add options
-                    _mainWindow.AddDropdownItem(d, "Mouse Event");
-                    _mainWindow.AddDropdownItem(d, "SendInput");
-                    uiManager.DDI_LGHUB = _mainWindow.AddDropdownItem(d, "LG HUB");
-                    uiManager.DDI_RazerSynapse = _mainWindow.AddDropdownItem(d, "Razer Synapse (Require Razer Peripheral)");
-                    uiManager.DDI_ddxoft = _mainWindow.AddDropdownItem(d, "ddxoft Virtual Input Driver");
-
-                    // Setup handlers
-                    uiManager.DDI_LGHUB.Selected += async (s, e) =>
-                    {
-                        if (!new LGHubMain().Load())
-                            await ResetToMouseEvent();
-                    };
-
-                    uiManager.DDI_RazerSynapse.Selected += async (s, e) =>
-                    {
-                        if (!await RZMouse.Load())
-                            await ResetToMouseEvent();
-                    };
-
-                    uiManager.DDI_ddxoft.Selected += async (s, e) =>
-                    {
-                        if (!await DdxoftMain.Load())
-                            await ResetToMouseEvent();
-                    };
-                })
-                .AddDropdown("Screen Capture Method", d =>
-                {
-                    uiManager.D_ScreenCaptureMethod = d;
-                    //d.DropdownBox.SelectedIndex = -1;  // Prevent auto-selection
-                    _mainWindow.AddDropdownItem(d, "DirectX");
-                    _mainWindow.AddDropdownItem(d, "GDI+");
+                    uiManager.AT_ModelSettings = t;
+                    t.Minimize.Click += (s, e) => TogglePanel("Model Settings", ModelSettingsPanel);
                 })
                 .AddDropdown("Image Size", d =>
                 {
@@ -207,6 +174,9 @@ namespace Aimmy2.Controls
                     // Handle selection change
                     d.DropdownBox.SelectionChanged += async (s, e) =>
                     {
+                        if (_suppressImageSizeSelectionChanged)
+                            return;
+
                         if (d.DropdownBox.SelectedItem == null || e.AddedItems.Count == 0)
                             return;
 
@@ -214,50 +184,25 @@ namespace Aimmy2.Controls
                         if (string.IsNullOrEmpty(newSize))
                             return;
 
-                        // Check if model is loaded
-                        if (FileManager.AIManager == null || Dictionary.lastLoadedModel == "N/A")
-                        {
-                            // No model loaded, just update the dictionary
-                            Dictionary.dropdownState["Image Size"] = newSize;
-                            LogManager.Log(LogLevel.Info, $"Image size set to {newSize}x{newSize} (no model loaded)", true, 2000);
-                            return;
-                        }
-
-                        FileManager.CurrentlyLoadingModel = true;
-                        LogManager.Log(LogLevel.Info, $"Image size changing to {newSize}");
-
-                        try
-                        {
-                            // Signal the AI to prepare for shutdown
-                            if (FileManager.AIManager != null)
-                            {
-                                FileManager.AIManager.RequestSizeChange(int.Parse(newSize));
-                                await Task.Delay(100); // Give AI loop time to pause
-                            }
-
-                            // Dispose the current AIManager
-                            var modelPath = System.IO.Path.Combine("bin/models", Dictionary.lastLoadedModel);
-                            FileManager.AIManager?.Dispose();
-                            FileManager.AIManager = null;
-
-                            // NOW it's safe to update the dictionary
-                            Dictionary.dropdownState["Image Size"] = newSize;
-
-                            // Create new AIManager with the new size
-                            FileManager.AIManager = new AIManager(modelPath);
-
-                            LogManager.Log(LogLevel.Info, $"Successfully changed image size to {newSize}x{newSize}", true, 2000);
-                        }
-                        catch (Exception ex)
-                        {
-                            LogManager.Log(LogLevel.Error, $"Error changing image size: {ex.Message}", true, 5000);
-                        }
-                        finally
-                        {
-                            FileManager.CurrentlyLoadingModel = false;
-                        }
+                        await _mainWindow!.ChangeImageSizeAsync(newSize);
                     };
-                })
+                }, tooltip: "Resolution the AI uses for detection. Smaller = faster but less accurate.")
+                .AddSlider("AI FPS Limit", "FPS", 5, 5, 0, 240, s =>
+                {
+                    uiManager.S_AIFpsLimit = s;
+                    s.SetValueFormatter(value => value <= 0 ? "Unlimited" : $"{value:F0} FPS");
+                }, tooltip: "Caps the AI loop to reduce CPU/GPU load. 0 keeps Aimmy running at full speed.")
+                .AddButton("Run Performance Helper", b =>
+                {
+                    b.Reader.Click += (s, e) => _mainWindow!.ShowPerformanceHelper();
+                }, tooltip: "Open the performance helper again for the currently loaded model.")
+                .AddDropdown("Target Class", d =>
+                {
+                    d.DropdownBox.SelectedIndex = 0;
+                    uiManager.D_TargetClass = d;
+                    _mainWindow.AddDropdownItem(d, "Best Confidence");
+                    UpdateTargetClassDropdown(d);
+                }, tooltip: "Which type of target to aim at. Best Confidence picks the most certain detection.")
                 .AddSlider("AI Minimum Confidence", "% Confidence", 1, 1, 1, 100, s =>
                 {
                     uiManager.S_AIMinimumConfidence = s;
@@ -269,34 +214,42 @@ namespace Aimmy2.Controls
                         else if (value <= 35)
                             LogManager.Log(LogLevel.Warning, "The minimum confidence you have set for Aimmy may be too low can cause false positives.", true);
                     };
+                }, tooltip: "How sure the AI must be before targeting. Higher = fewer false detections but may miss targets.")
+                .AddToggle("Enable Model Switch Keybind", t => uiManager.T_EnableModelSwitchKeybind = t,
+                    tooltip: "Allow switching between AI models using a hotkey.")
+                .AddKeyChanger("Model Switch Keybind", k => uiManager.C_ModelSwitchKeybind = k,
+                    tooltip: "Press this key to cycle through available AI models.")
+                .AddKeyChanger("Emergency Stop Keybind", k => uiManager.C_EmergencyKeybind = k,
+                    tooltip: "Press this key to immediately stop all aim assist functions.")
+                .AddSeparator();
+        }
+
+        private void LoadSettingsConfig()
+        {
+            var uiManager = _mainWindow!.uiManager;
+            var builder = new SectionBuilder(this, SettingsConfig);
+
+            builder
+                .AddTitle("Settings Menu", true, t =>
+                {
+                    uiManager.AT_SettingsMenu = t;
+                    t.Minimize.Click += (s, e) => TogglePanel("Settings Menu", SettingsConfigPanel);
                 })
-                .AddToggle("Mouse Background Effect", t => uiManager.T_MouseBackgroundEffect = t)
-                .AddToggle("UI TopMost", t => uiManager.T_UITopMost = t)
-                .AddToggle("Debug Mode", t => uiManager.T_DebugMode = t)
-                .AddToggle("StreamGuard", t => uiManager.T_StreamGuard = t)
-                .AddKeyChanger("Enable StreamGuard TKB")
+                .AddToggle("Collect Data While Playing", t => uiManager.T_CollectDataWhilePlaying = t,
+                    tooltip: "Save screenshots of detections for training new AI models.")
+                .AddToggle("Auto Label Data", t => uiManager.T_AutoLabelData = t,
+                    tooltip: "Automatically label collected screenshots with detection data.")
+                .AddToggle("Mouse Background Effect", t => uiManager.T_MouseBackgroundEffect = t,
+                    tooltip: "Show a visual effect on the UI when moving your mouse.")
+                .AddToggle("UI TopMost", t => uiManager.T_UITopMost = t,
+                    tooltip: "Keep this window above all other windows.")
+                .AddToggle("Debug Mode", t => uiManager.T_DebugMode = t,
+                    tooltip: "Show extra information useful for troubleshooting problems.")
                 .AddButton("Save Config", b =>
                 {
                     uiManager.B_SaveConfig = b;
                     b.Reader.Click += (s, e) => new ConfigSaver().ShowDialog();
-                })
-                .AddSeparator();
-        }
-
-        private void LoadXYPercentageMenu()
-        {
-            var uiManager = _mainWindow!.uiManager;
-            var builder = new SectionBuilder(this, XYPercentageEnablerMenu);
-
-            builder
-                .AddTitle("X/Y Percentage Adjustment", true, t =>
-                {
-                    uiManager.AT_XYPercentageAdjustmentEnabler = t;
-                    t.Minimize.Click += (s, e) =>
-                        TogglePanel("X/Y Percentage Adjustment", XYPercentageEnablerMenuPanel);
-                })
-                .AddToggle("X Axis Percentage Adjustment", t => uiManager.T_XAxisPercentageAdjustment = t)
-                .AddToggle("Y Axis Percentage Adjustment", t => uiManager.T_YAxisPercentageAdjustment = t)
+                }, tooltip: "Save your current settings to a file you can load later.")
                 .AddSeparator();
         }
 
@@ -306,12 +259,21 @@ namespace Aimmy2.Controls
             var builder = new SectionBuilder(this, DisplaySelectMenu);
 
             builder
-                .AddTitle("Display Settings", true, t =>
+                .AddTitle("Screen Settings", true, t =>
                 {
                     uiManager.AT_DisplaySelector = t;
                     t.Minimize.Click += (s, e) =>
-                        TogglePanel("Display Settings", DisplaySelectMenuPanel);
+                        TogglePanel("Screen Settings", DisplaySelectMenuPanel);
                 })
+                .AddDropdown("Screen Capture Method", d =>
+                {
+                    d.DropdownBox.SelectedIndex = -1;  // Prevent auto-selection that overwrites saved state
+                    uiManager.D_ScreenCaptureMethod = d;
+                    _mainWindow.AddDropdownItem(d, "DirectX");
+                    _mainWindow.AddDropdownItem(d, "GDI+");
+                }, tooltip: "How the screen is captured. DirectX is faster, GDI+ works on more systems.")
+                .AddToggle("StreamGuard", t => uiManager.T_StreamGuard = t,
+                    tooltip: "Hide the overlay from screen recordings and streams. - Appears in system tray.")
                 .AddSeparator();
 
             // Handle DisplaySelector separately as it's a custom control
@@ -323,7 +285,7 @@ namespace Aimmy2.Controls
             DisplaySelectMenu.Children.Insert(insertIndex, uiManager.DisplaySelector);
 
             // Add refresh button after DisplaySelector
-            var refreshButton = new APButton("Refresh Displays");
+            var refreshButton = new APButton("Refresh Displays", "Update the list of available monitors.");
             refreshButton.Reader.Click += (s, e) =>
             {
                 try
@@ -397,25 +359,107 @@ namespace Aimmy2.Controls
             _mainWindow!.uiManager.D_MouseMovementMethod!.DropdownBox.SelectedIndex = 0;
         }
 
-        public void UpdateImageSizeDropdown(string newSize)
+        public void UpdateImageSizeDropdown(string newSize, bool suppressSelectionChanged = true)
         {
             if (_mainWindow?.uiManager.D_ImageSize != null)
             {
                 var dropdown = _mainWindow.uiManager.D_ImageSize;
+                _suppressImageSizeSelectionChanged = suppressSelectionChanged;
+                try
+                {
+                    for (int i = 0; i < dropdown.DropdownBox.Items.Count; i++)
+                    {
+                        if ((dropdown.DropdownBox.Items[i] as ComboBoxItem)?.Content?.ToString() == newSize)
+                        {
+                            dropdown.DropdownBox.SelectedIndex = i;
+                            break;
+                        }
+                    }
+                }
+                finally
+                {
+                    _suppressImageSizeSelectionChanged = false;
+                }
+            }
+        }
+
+        private void OnClassesChanged(Dictionary<int, string> classes)
+        {
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                if (_mainWindow?.uiManager.D_TargetClass != null)
+                {
+                    UpdateTargetClassDropdown(_mainWindow.uiManager.D_TargetClass, classes);
+                }
+            });
+        }
+
+        private void OnDynamicModelStatusChanged(bool isDynamic)
+        {
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                UpdateDynamicModelDropdownsVisibility(isDynamic);
+            });
+        }
+
+        private void UpdateDynamicModelDropdownsVisibility(bool isDynamic)
+        {
+            // Only Image Size depends on dynamic model - it's hidden for static models
+            // Target Class is always visible since both static and dynamic models can have multiple classes
+            var imageSizeVisibility = isDynamic ? Visibility.Visible : Visibility.Collapsed;
+
+            if (_mainWindow?.uiManager.D_ImageSize != null)
+            {
+                _mainWindow.uiManager.D_ImageSize.Visibility = imageSizeVisibility;
+            }
+        }
+
+        private void UpdateTargetClassDropdown(ADropdown dropdown, Dictionary<int, string>? _classes = null)
+        {
+            if (dropdown?.DropdownBox == null) return;
+            var visibility = _classes != null && _classes.Count > 1
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+            dropdown.Visibility = visibility;
+            _mainWindow!.uiManager.D_TargetClass!.Visibility = visibility;
+
+            string? selection = (dropdown.DropdownBox.SelectedItem as ComboBoxItem)?.Content?.ToString();
+
+            var removedItems = dropdown.DropdownBox.Items.Cast<ComboBoxItem>()
+                .Where(item => item.Content?.ToString() != "Best Confidence")
+                .ToList();
+
+            foreach (var item in removedItems)
+            {
+                dropdown.DropdownBox.Items.Remove(item);
+            }
+
+            var classes = _classes ?? FileManager.AIManager?.ModelClasses ?? new Dictionary<int, string>();
+
+            foreach (var kvp in classes.OrderBy(x => x.Key))
+            {
+                _mainWindow!.AddDropdownItem(dropdown, kvp.Value);
+            }
+
+            if (!string.IsNullOrEmpty(selection)) // tries to restore the selection
+            {
                 for (int i = 0; i < dropdown.DropdownBox.Items.Count; i++)
                 {
-                    if ((dropdown.DropdownBox.Items[i] as ComboBoxItem)?.Content?.ToString() == newSize)
+                    if ((dropdown.DropdownBox.Items[i] as ComboBoxItem)?.Content?.ToString() == selection)
                     {
                         dropdown.DropdownBox.SelectedIndex = i;
-                        break;
+                        return;
                     }
                 }
             }
+
+            dropdown.DropdownBox.SelectedIndex = 0;
         }
 
         public void Dispose()
         {
             DisplayManager.DisplayChanged -= OnDisplayChanged;
+            AIManager.ClassesUpdated -= OnClassesChanged;
             _mainWindow?.uiManager.DisplaySelector?.Dispose();
 
             // Save minimize states before disposing
@@ -426,9 +470,9 @@ namespace Aimmy2.Controls
 
         #region Control Creation Methods
 
-        private AToggle CreateToggle(string title)
+        private AToggle CreateToggle(string title, string? tooltip = null)
         {
-            var toggle = new AToggle(title);
+            var toggle = new AToggle(title, tooltip);
             _mainWindow!.toggleInstances[title] = toggle;
 
             // Set initial state
@@ -449,9 +493,9 @@ namespace Aimmy2.Controls
         }
 
         //copied & Pasted from other class
-        private AKeyChanger CreateKeyChanger(string title, string keybind)
+        private AKeyChanger CreateKeyChanger(string title, string keybind, string? tooltip = null)
         {
-            var keyChanger = new AKeyChanger(title, keybind);
+            var keyChanger = new AKeyChanger(title, keybind, tooltip);
 
             keyChanger.Reader.Click += (sender, e) =>
             {
@@ -476,9 +520,9 @@ namespace Aimmy2.Controls
         }
 
         private ASlider CreateSlider(string title, string label, double frequency, double buttonSteps,
-            double min, double max)
+            double min, double max, string? tooltip = null)
         {
-            var slider = new ASlider(title, label, buttonSteps)
+            var slider = new ASlider(title, label, buttonSteps, tooltip)
             {
                 Slider = { Minimum = min, Maximum = max, TickFrequency = frequency }
             };
@@ -489,7 +533,7 @@ namespace Aimmy2.Controls
             return slider;
         }
 
-        private ADropdown CreateDropdown(string title) => new(title, title);
+        private ADropdown CreateDropdown(string title, string? tooltip = null) => new(title, title, tooltip);
 
         #endregion
 
@@ -514,44 +558,44 @@ namespace Aimmy2.Controls
                 return this;
             }
 
-            public SectionBuilder AddToggle(string title, Action<AToggle>? configure = null)
+            public SectionBuilder AddToggle(string title, Action<AToggle>? configure = null, string? tooltip = null)
             {
-                var toggle = _parent.CreateToggle(title);
+                var toggle = _parent.CreateToggle(title, tooltip);
                 configure?.Invoke(toggle);
                 _panel.Children.Add(toggle);
                 return this;
             }
 
-            //copied & Pasted from other class
-            public SectionBuilder AddKeyChanger(string title, Action<AKeyChanger>? configure = null, string? defaultKey = null)
+            public SectionBuilder AddKeyChanger(string title, Action<AKeyChanger>? configure = null, string? defaultKey = null, string? tooltip = null)
             {
                 var key = defaultKey ?? Dictionary.bindingSettings[title];
-                var keyChanger = _parent.CreateKeyChanger(title, key);
+                var keyChanger = _parent.CreateKeyChanger(title, key, tooltip);
                 configure?.Invoke(keyChanger);
                 _panel.Children.Add(keyChanger);
                 return this;
             }
 
             public SectionBuilder AddSlider(string title, string label, double frequency, double buttonSteps,
-                double min, double max, Action<ASlider>? configure = null)
+                double min, double max, Action<ASlider>? configure = null, string? tooltip = null)
             {
-                var slider = _parent.CreateSlider(title, label, frequency, buttonSteps, min, max);
+                var slider = _parent.CreateSlider(title, label, frequency, buttonSteps, min, max, tooltip);
                 configure?.Invoke(slider);
                 _panel.Children.Add(slider);
                 return this;
             }
 
-            public SectionBuilder AddDropdown(string title, Action<ADropdown>? configure = null)
+            public SectionBuilder AddDropdown(string title, Action<ADropdown>? configure = null, string? tooltip = null)
             {
-                var dropdown = _parent.CreateDropdown(title);
+                var dropdown = _parent.CreateDropdown(title, tooltip);
                 configure?.Invoke(dropdown);
                 _panel.Children.Add(dropdown);
                 return this;
             }
 
-            public SectionBuilder AddButton(string title, Action<APButton>? configure = null)
+            public SectionBuilder AddButton(string title, Action<APButton>? configure = null, string? tooltip = null)
             {
-                var button = new APButton(title);
+                string icon = title == "Run Performance Helper" ? "\uE768" : "\uE8B0";
+                var button = new APButton(title, tooltip, icon);
                 configure?.Invoke(button);
                 _panel.Children.Add(button);
                 return this;

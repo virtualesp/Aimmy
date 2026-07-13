@@ -25,6 +25,8 @@ namespace Other
         //private FOV FOVWindow;
 
         public static AIManager? AIManager;
+        public static event Action<AIManager>? ModelLoaded;
+        internal static readonly SemaphoreSlim ModelOperationLock = new(1, 1);
 
         public FileManager(ListBox modelListBox, Label selectedModelNotifier, ListBox configListBox, Label selectedConfigNotifier)
         {
@@ -37,15 +39,6 @@ namespace Other
             ModelListBox.SelectionChanged += ModelListBox_SelectionChanged;
             ConfigListBox.SelectionChanged += ConfigListBox_SelectionChanged;
 
-            ModelListBox.AllowDrop = true;
-            ModelListBox.DragOver += ModelListBox_DragOver; 
-            ModelListBox.Drop += ModelListBox_DragDrop;
-
-            ConfigListBox.AllowDrop = true;
-            ConfigListBox.DragOver += ConfigListBox_DragDrop;
-            ConfigListBox.Drop += ConfigListBox_DragDrop;
-
-
             CheckForRequiredFolders();
             InitializeFileWatchers();
             LoadModelsIntoListBox(null, null);
@@ -55,7 +48,7 @@ namespace Other
         private void CheckForRequiredFolders()
         {
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            string[] dirs = ["bin\\models", "bin\\images", "bin\\labels", "bin\\configs", "bin\\anti_recoil_configs"];
+            string[] dirs = ["bin\\models", "bin\\images", "bin\\labels", "bin\\configs"];
 
             try
             {
@@ -82,39 +75,159 @@ namespace Other
             if (ModelListBox.SelectedItem == null) return;
 
             string selectedModel = ModelListBox.SelectedItem.ToString()!;
-
             string modelPath = Path.Combine("bin/models", selectedModel);
 
-            // Check if the model is already selected or currently loading
-            if (Dictionary.lastLoadedModel == selectedModel || CurrentlyLoadingModel) return;
+            if (Dictionary.lastLoadedModel == selectedModel || !ModelOperationLock.Wait(0))
+                return;
 
             CurrentlyLoadingModel = true;
-            Dictionary.lastLoadedModel = selectedModel;
+            string previousModel = Dictionary.lastLoadedModel;
+            AIManager? previousManager = AIManager;
+            AIManager? manager = null;
+            AIManager? loadedManager = null;
+            bool notifyModelLoaded = false;
 
-            // Store original values and disable them temporarily
             var toggleKeys = new[] { "Aim Assist", "Constant AI Tracking", "Auto Trigger", "Show Detected Player", "Show AI Confidence", "Show Tracers" };
-            var originalToggleStates = toggleKeys.ToDictionary(key => key, key => Dictionary.toggleState[key]);
-            foreach (var key in toggleKeys)
+            var originalToggleStates = new Dictionary<string, dynamic>();
+
+            try
             {
-                Dictionary.toggleState[key] = false;
+                foreach (var key in toggleKeys)
+                {
+                    if (Dictionary.toggleState.TryGetValue(key, out dynamic? originalValue))
+                    {
+                        originalToggleStates[key] = originalValue;
+                    }
+
+                    Dictionary.toggleState[key] = false;
+                }
+
+                // Let the AI finish up
+                await Task.Delay(150);
+
+                DisposeManager(previousManager, "Previous model session did not stop cleanly");
+                AIManager = null;
+
+                manager = await CreateLoadedManagerAsync(modelPath);
+                if (manager == null)
+                {
+                    bool restored = await RestorePreviousModelAsync(previousModel);
+                    if (!restored)
+                    {
+                        MarkNoModelLoaded();
+                    }
+
+                    LogManager.Log(LogManager.LogLevel.Error, $"Failed to load model: {selectedModel}", true, 5000);
+                    return;
+                }
+
+                AIManager = manager;
+                loadedManager = manager;
+                manager = null;
+                Dictionary.lastLoadedModel = selectedModel;
+
+                string content = "Loaded Model: " + selectedModel;
+                SelectedModelNotifier.Content = content;
+                LogManager.Log(LogManager.LogLevel.Info, content, true, 2000);
+                notifyModelLoaded = true;
+            }
+            catch (Exception ex)
+            {
+                DisposeManager(manager, "Failed model session did not stop cleanly");
+                bool restored = await RestorePreviousModelAsync(previousModel);
+                if (!restored)
+                {
+                    MarkNoModelLoaded();
+                }
+
+                LogManager.Log(LogManager.LogLevel.Error, $"Failed to load model: {selectedModel}. {ex.Message}", true, 5000);
+            }
+            finally
+            {
+                // Restore original values
+                foreach (var keyValuePair in originalToggleStates)
+                {
+                    Dictionary.toggleState[keyValuePair.Key] = keyValuePair.Value;
+                }
+
+                CurrentlyLoadingModel = false;
+                ModelOperationLock.Release();
             }
 
-            // Let the AI finish up
-            await Task.Delay(150);
-
-            // Reload AIManager with new model
-            AIManager?.Dispose();
-            AIManager = new AIManager(modelPath);
-
-            // Restore original values
-            foreach (var keyValuePair in originalToggleStates)
+            if (notifyModelLoaded && loadedManager != null)
             {
-                Dictionary.toggleState[keyValuePair.Key] = keyValuePair.Value;
+                try
+                {
+                    ModelLoaded?.Invoke(loadedManager);
+                }
+                catch (Exception ex)
+                {
+                    LogManager.Log(LogManager.LogLevel.Warning, $"Model loaded, but a load notification failed: {ex.Message}", true, 5000);
+                }
+            }
+        }
+
+        private static async Task<AIManager?> CreateLoadedManagerAsync(string modelPath)
+        {
+            var manager = new AIManager(modelPath);
+            if (await manager.InitializationTask)
+            {
+                return manager;
             }
 
-            string content = "Loaded Model: " + selectedModel;
-            SelectedModelNotifier.Content = content;
-            LogManager.Log(LogManager.LogLevel.Info, content, true, 2000);
+            manager.Dispose();
+            return null;
+        }
+
+        private async Task<bool> RestorePreviousModelAsync(string previousModel)
+        {
+            if (previousModel == "N/A")
+                return false;
+
+            string previousModelPath = Path.Combine("bin/models", previousModel);
+            if (!File.Exists(previousModelPath))
+                return false;
+
+            AIManager? restoredManager = await CreateLoadedManagerAsync(previousModelPath);
+            if (restoredManager == null)
+                return false;
+
+            AIManager = restoredManager;
+            Dictionary.lastLoadedModel = previousModel;
+            RestoreModelSelection(previousModel);
+            SelectedModelNotifier.Content = $"Loaded Model: {previousModel}";
+            return true;
+        }
+
+        private void MarkNoModelLoaded()
+        {
+            AIManager = null;
+            Dictionary.lastLoadedModel = "N/A";
+            RestoreModelSelection("N/A");
+            SelectedModelNotifier.Content = "Loaded Model: N/A";
+        }
+
+        private static void DisposeManager(AIManager? manager, string warningPrefix)
+        {
+            try
+            {
+                manager?.Dispose();
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log(LogManager.LogLevel.Warning, $"{warningPrefix}: {ex.Message}");
+            }
+        }
+
+        private void RestoreModelSelection(string previousModel)
+        {
+            if (previousModel != "N/A" && ModelListBox.Items.Contains(previousModel))
+            {
+                ModelListBox.SelectedItem = previousModel;
+                return;
+            }
+
+            ModelListBox.SelectedItem = null;
         }
 
         private void ConfigListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -123,7 +236,9 @@ namespace Other
             string selectedConfig = ConfigListBox.SelectedItem.ToString()!;
 
             string configPath = Path.Combine("bin/configs", selectedConfig);
+            Dictionary.lastLoadedConfig = selectedConfig;
 
+            Aimmy2.MainWindow.ApplyConfigLoadDefaults(Dictionary.sliderSettings);
             SaveDictionary.LoadJSON(Dictionary.sliderSettings, configPath);
             PropertyChanger.PostNewConfig(configPath, true);
 
@@ -161,71 +276,6 @@ namespace Other
             }
         }
 
-        private void ModelListBox_DragOver(object sender, DragEventArgs e)
-        {
-            if (e.Data.GetDataPresent(DataFormats.FileDrop))
-            {
-                e.Effects = DragDropEffects.Copy;
-            }
-            else
-            {
-                e.Effects = DragDropEffects.None;
-            }
-
-            e.Handled = true;
-        }
-
-        private void ModelListBox_DragDrop(object sender, DragEventArgs e)
-        {
-            if (e.Data.GetDataPresent(DataFormats.FileDrop))
-            {
-                string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
-                string targetFolder = "bin/models";
-
-                foreach (var file in files)
-                {
-                    if (Path.GetExtension(file) == ".onnx")
-                    {
-                        string fileName = Path.GetFileName(file);
-                        string destFile = Path.Combine(targetFolder, fileName);
-                        File.Move(file, destFile, true);
-                    }
-                }
-            }
-        }
-        private void ConfigListBox_DragOver(object sender, DragEventArgs e)
-        {
-            if (e.Data.GetDataPresent(DataFormats.FileDrop))
-            {
-                e.Effects = DragDropEffects.Copy;
-            }
-            else
-            {
-                e.Effects = DragDropEffects.None;
-            }
-
-            e.Handled = true;
-        }
-
-        private void ConfigListBox_DragDrop(object sender, DragEventArgs e)
-        {
-            if (e.Data.GetDataPresent(DataFormats.FileDrop))
-            {
-                string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
-                string targetFolder = "bin/models";
-
-                foreach (var file in files)
-                {
-                    if (Path.GetExtension(file) == ".cfg")
-                    {
-                        string fileName = Path.GetFileName(file);
-                        string destFile = Path.Combine(targetFolder, fileName);
-                        File.Move(file, destFile, true);
-                    }
-                }
-            }
-        }
-
         public void LoadModelsIntoListBox(object? sender, FileSystemEventArgs? e)
         {
             if (!InQuittingState)
@@ -243,7 +293,7 @@ namespace Other
                     if (ModelListBox.Items.Count > 0)
                     {
                         string? lastLoadedModel = Dictionary.lastLoadedModel;
-                        if (lastLoadedModel != "N/A" && !ModelListBox.Items.Contains(lastLoadedModel)) { ModelListBox.SelectedItem = lastLoadedModel; }
+                        if (lastLoadedModel != "N/A" && ModelListBox.Items.Contains(lastLoadedModel)) { ModelListBox.SelectedItem = lastLoadedModel; }
                         SelectedModelNotifier.Content = $"Loaded Model: {lastLoadedModel}";
                     }
                 });
@@ -267,7 +317,7 @@ namespace Other
                     if (ConfigListBox.Items.Count > 0)
                     {
                         string? lastLoadedConfig = Dictionary.lastLoadedConfig;
-                        if (lastLoadedConfig != "N/A" && !ConfigListBox.Items.Contains(lastLoadedConfig)) { ConfigListBox.SelectedItem = lastLoadedConfig; }
+                        if (lastLoadedConfig != "N/A" && ConfigListBox.Items.Contains(lastLoadedConfig)) { ConfigListBox.SelectedItem = lastLoadedConfig; }
 
                         SelectedConfigNotifier.Content = "Loaded Config: " + lastLoadedConfig;
                     }

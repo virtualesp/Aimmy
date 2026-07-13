@@ -1,6 +1,4 @@
 ﻿using Aimmy2.Theme;
-using Newtonsoft.Json.Linq;
-using System.Globalization;
 using System.IO;
 using System.Text.RegularExpressions;
 using System.Windows;
@@ -11,7 +9,6 @@ using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Visuality;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement.ScrollBar;
 
 namespace Aimmy2.UILibrary
 {
@@ -48,7 +45,8 @@ namespace Aimmy2.UILibrary
             }
         }
         //--
-        private Color _initialColor;
+        private Color _initialColor = Colors.Transparent; // Transparent means "not set"
+        private bool _hasInitialColor = false;
         public bool SuppressThemeApply { get; set; } = false;
         private bool _isShowingDragDrop = false;
         private readonly TimeSpan _animationDuration = TimeSpan.FromMilliseconds(200);
@@ -76,8 +74,15 @@ namespace Aimmy2.UILibrary
             // Create the color wheel bitmap
             CreateColorWheel();
 
-            // Load saved theme color
-            _selectedColor = ThemeManager.ThemeColor;
+            // Use initial color if set, otherwise use theme color
+            if (_hasInitialColor)
+            {
+                _selectedColor = _initialColor;
+            }
+            else
+            {
+                _selectedColor = ThemeManager.ThemeColor;
+            }
             _previewColor = _selectedColor;
             UpdateColorPreview(_previewColor);
 
@@ -466,6 +471,7 @@ namespace Aimmy2.UILibrary
         public void SetInitialColor(Color color)
         {
             _initialColor = color;
+            _hasInitialColor = true;
         }
         //--
 

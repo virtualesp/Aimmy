@@ -1,3 +1,4 @@
+using Aimmy2.AILogic;
 using Aimmy2.Class;
 using Aimmy2.Controls;
 using Aimmy2.MouseMovementLibraries.GHubSupport;
@@ -8,6 +9,7 @@ using AimmyWPF.Class;
 using Class;
 using InputLogic;
 using Other;
+using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -26,7 +28,6 @@ namespace Aimmy2
         private readonly Lazy<InputBindingManager> _bindingManager = new(() => new InputBindingManager());
         private static readonly Lazy<GithubManager> _githubManager = new(() => new GithubManager());
         private readonly Lazy<UI> _uiManager = new(() => new UI());
-        private readonly Lazy<AntiRecoilManager> _arManager = new(() => new AntiRecoilManager());
         private Lazy<FileManager>? _fileManager;
 
         // Windows
@@ -53,7 +54,6 @@ namespace Aimmy2
         public static DetectedPlayerWindow DPWindow => _dpWindow.Value;
         public static GithubManager githubManager => _githubManager.Value;
         public UI uiManager => _uiManager.Value;
-        public AntiRecoilManager arManager => _arManager.Value;
 
         #endregion
 
@@ -68,6 +68,7 @@ namespace Aimmy2
         private ScrollViewer? CurrentScrollViewer;
         public double ActualFOV { get; set; } = 640;
         private double _currentGradientAngle;
+        private bool _performanceHelperOpen;
 
         // Menu names constant
         private static readonly string[] MenuNames = { "AimMenu", "ModelMenu", "SettingsMenu", "AboutMenu" };
@@ -129,7 +130,8 @@ namespace Aimmy2
         private void LoadInitialMenu()
         {
             LoadMenu("AimMenu");
-            UpdateSliderVisibility(uiManager);
+            // Don't call UpdateSliderVisibility here - it would override collapsed menu states
+            // Visibility is handled by the toggle click actions when user interacts with toggles
             _currentMenu = "AimMenu";
         }
 
@@ -144,13 +146,6 @@ namespace Aimmy2
             InitializeWindows();
 
             EnsureRequiredFiles();
-
-            // Configuration loading has been moved to Window_Loaded before menu initialization
-            // Only load specific configurations that aren't related to UI state
-            await Task.Run(() =>
-            {
-                arManager.HoldDownLoad();
-            });
 
             SetupKeybindings();
             ConfigurePropertyChangers();
@@ -224,7 +219,8 @@ namespace Aimmy2
                     (Dictionary.bindingSettings, "bin\\binding.cfg"),
                     (Dictionary.colorState, "bin\\colors.cfg"),
                     (Dictionary.filelocationState, "bin\\filelocations.cfg"),
-                    (Dictionary.dropdownState, "bin\\dropdown.cfg")
+                    (Dictionary.dropdownState, "bin\\dropdown.cfg"),
+                    (Dictionary.toggleState, "bin\\toggles.cfg")
                 };
 
                 foreach (var (dict, path) in configs)
@@ -235,9 +231,6 @@ namespace Aimmy2
 
             // Load these on UI thread since they might show notifications
             LoadConfig();
-            LoadAntiRecoilConfig();
-
-            arManager.HoldDownLoad(); // needs to be ran on ui thread or just cant be run via Task.Run -whip
             ApplyThemeColorFromConfig();
         }
 
@@ -265,9 +258,7 @@ namespace Aimmy2
             var keybinds = new[]
             {
                 "Aim Keybind", "Second Aim Keybind", "Dynamic FOV Keybind",
-                "Emergency Stop Keybind", "Model Switch Keybind",
-                "Anti Recoil Keybind", "Disable Anti Recoil Keybind",
-                "Gun 1 Key", "Gun 2 Key"
+                "Emergency Stop Keybind", "Model Switch Keybind"
             };
 
             foreach (var keybind in keybinds)
@@ -363,6 +354,9 @@ namespace Aimmy2
 
         private void InitializeFileManager(ModelMenuControl modelMenu)
         {
+            FileManager.ModelLoaded -= OnModelLoaded;
+            FileManager.ModelLoaded += OnModelLoaded;
+
             if (_fileManager == null)
             {
                 _fileManager = new Lazy<FileManager>(() => new FileManager(
@@ -379,6 +373,220 @@ namespace Aimmy2
                 {
                 }
             }
+        }
+
+        private void OnModelLoaded(AIManager manager)
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.Invoke(() => OnModelLoaded(manager));
+                return;
+            }
+
+            if (!PerformanceHelperState.ShouldPrompt())
+            {
+                return;
+            }
+
+            ShowPerformanceHelper(manager, PerformanceHelperWindow.LaunchMode.CompactPrompt);
+        }
+
+        internal void ShowPerformanceHelper()
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.Invoke(ShowPerformanceHelper);
+                return;
+            }
+
+            var manager = FileManager.AIManager;
+            if (manager == null || !manager.IsLoaded)
+            {
+                LogManager.Log(LogManager.LogLevel.Warning, "Load a model before opening the Performance Helper.", true, 3000);
+                return;
+            }
+
+            ShowPerformanceHelper(manager, PerformanceHelperWindow.LaunchMode.FullHelper);
+        }
+
+        private void ShowPerformanceHelper(AIManager manager, PerformanceHelperWindow.LaunchMode launchMode)
+        {
+            if (_performanceHelperOpen ||
+                !ReferenceEquals(FileManager.AIManager, manager) ||
+                !manager.IsLoaded)
+            {
+                return;
+            }
+
+            _performanceHelperOpen = true;
+            try
+            {
+                var helper = new PerformanceHelperWindow(this, manager, launchMode)
+                {
+                    Owner = this
+                };
+                helper.ShowDialog();
+            }
+            finally
+            {
+                _performanceHelperOpen = false;
+            }
+        }
+
+        internal async Task<bool> ChangeImageSizeAsync(string newSize)
+        {
+            if (string.IsNullOrWhiteSpace(newSize))
+                return false;
+
+            newSize = newSize.Trim();
+            if (!int.TryParse(newSize, NumberStyles.Integer, CultureInfo.InvariantCulture, out int requestedSize))
+                return false;
+
+            await FileManager.ModelOperationLock.WaitAsync();
+            FileManager.CurrentlyLoadingModel = true;
+            string? previousSize = null;
+            string? loadedModel = null;
+            string? modelPath = null;
+
+            try
+            {
+                if (FileManager.AIManager == null || Dictionary.lastLoadedModel == "N/A")
+                {
+                    Dictionary.dropdownState["Image Size"] = newSize;
+                    SettingsMenuControlInstance?.UpdateImageSizeDropdown(newSize);
+                    LogManager.Log(LogManager.LogLevel.Info, $"Image size set to {newSize}x{newSize} (no model loaded)", true, 2000);
+                    return true;
+                }
+
+                previousSize = Dictionary.dropdownState["Image Size"];
+                loadedModel = Dictionary.lastLoadedModel;
+                modelPath = Path.Combine("bin/models", loadedModel);
+                AIManager managerToReplace = FileManager.AIManager;
+                LogManager.Log(LogManager.LogLevel.Info, $"Image size changing to {newSize}");
+
+                managerToReplace.RequestSizeChange(requestedSize);
+                await Task.Delay(100);
+
+                FileManager.AIManager = null;
+                managerToReplace.Dispose();
+
+                Dictionary.dropdownState["Image Size"] = newSize;
+
+                var manager = new AIManager(modelPath);
+                bool loaded = await manager.InitializationTask;
+
+                if (loaded)
+                {
+                    FileManager.AIManager = manager;
+                    Dictionary.lastLoadedModel = loadedModel;
+                    string actualSize = AimSettings.ImageSize.ToString(CultureInfo.InvariantCulture);
+                    Dictionary.dropdownState["Image Size"] = actualSize;
+                    SettingsMenuControlInstance?.UpdateImageSizeDropdown(actualSize);
+
+                    if (actualSize == newSize)
+                    {
+                        LogManager.Log(LogManager.LogLevel.Info, $"Successfully changed image size to {actualSize}x{actualSize}", true, 2000);
+                        return true;
+                    }
+
+                    LogManager.Log(
+                        LogManager.LogLevel.Warning,
+                        $"Model loaded at {actualSize}x{actualSize}; requested {newSize}x{newSize} was not applied.",
+                        true,
+                        5000);
+                    return false;
+                }
+
+                manager.Dispose();
+                FileManager.AIManager = null;
+                Dictionary.dropdownState["Image Size"] = previousSize;
+                SettingsMenuControlInstance?.UpdateImageSizeDropdown(previousSize);
+                LogManager.Log(LogManager.LogLevel.Error, $"Model could not reload at {newSize}x{newSize}. Restoring {previousSize}x{previousSize}.", true, 5000);
+
+                var restoredManager = new AIManager(modelPath);
+                if (await restoredManager.InitializationTask)
+                {
+                    FileManager.AIManager = restoredManager;
+                    Dictionary.lastLoadedModel = loadedModel;
+                    string actualSize = AimSettings.ImageSize.ToString(CultureInfo.InvariantCulture);
+                    Dictionary.dropdownState["Image Size"] = actualSize;
+                    SettingsMenuControlInstance?.UpdateImageSizeDropdown(actualSize);
+                }
+                else
+                {
+                    restoredManager.Dispose();
+                    FileManager.AIManager = null;
+                    Dictionary.lastLoadedModel = "N/A";
+                }
+                return false;
+            }
+            catch (Exception ex)
+            {
+                if (!string.IsNullOrWhiteSpace(previousSize))
+                {
+                    Dictionary.dropdownState["Image Size"] = previousSize;
+                    SettingsMenuControlInstance?.UpdateImageSizeDropdown(previousSize);
+                }
+
+                LogManager.Log(LogManager.LogLevel.Error, $"Error changing image size: {ex.Message}", true, 5000);
+                if (FileManager.AIManager == null &&
+                    !string.IsNullOrWhiteSpace(modelPath) &&
+                    File.Exists(modelPath))
+                {
+                    try
+                    {
+                        var restoredManager = new AIManager(modelPath);
+                        if (await restoredManager.InitializationTask)
+                        {
+                            FileManager.AIManager = restoredManager;
+                            if (!string.IsNullOrWhiteSpace(loadedModel))
+                            {
+                                Dictionary.lastLoadedModel = loadedModel;
+                            }
+
+                            string actualSize = AimSettings.ImageSize.ToString(CultureInfo.InvariantCulture);
+                            Dictionary.dropdownState["Image Size"] = actualSize;
+                            SettingsMenuControlInstance?.UpdateImageSizeDropdown(actualSize);
+                        }
+                        else
+                        {
+                            restoredManager.Dispose();
+                            FileManager.AIManager = null;
+                            Dictionary.lastLoadedModel = "N/A";
+                        }
+                    }
+                    catch
+                    {
+                        Dictionary.lastLoadedModel = "N/A";
+                    }
+                }
+
+                return false;
+            }
+            finally
+            {
+                FileManager.CurrentlyLoadingModel = false;
+                FileManager.ModelOperationLock.Release();
+            }
+        }
+
+        internal async Task<bool> ApplyPerformanceRecommendationAsync(PerformanceRecommendation recommendation)
+        {
+            if (recommendation.CanChangeImageSize &&
+                recommendation.SuggestedImageSize != AimSettings.ImageSize)
+            {
+                bool changed = await ChangeImageSizeAsync(recommendation.SuggestedImageSize.ToString());
+                if (!changed)
+                    return false;
+            }
+
+            Dictionary.sliderSettings["AI FPS Limit"] = recommendation.SuggestedFpsLimit;
+            if (uiManager.S_AIFpsLimit != null)
+            {
+                uiManager.S_AIFpsLimit.Slider.Value = recommendation.SuggestedFpsLimit;
+            }
+
+            return true;
         }
 
         #endregion
@@ -456,7 +664,7 @@ namespace Aimmy2
             SaveDictionary.WriteJSON(Dictionary.dropdownState, "bin\\dropdown.cfg");
             SaveDictionary.WriteJSON(Dictionary.colorState, "bin\\colors.cfg");
             SaveDictionary.WriteJSON(Dictionary.filelocationState, "bin\\filelocations.cfg");
-            SaveDictionary.WriteJSON(Dictionary.AntiRecoilSettings, "bin\\anti_recoil_configs\\Default.cfg");
+            SaveDictionary.WriteJSON(Dictionary.toggleState, "bin\\toggles.cfg");
         }
 
         #endregion
@@ -624,7 +832,7 @@ namespace Aimmy2
                 ["UI TopMost"] = () => Topmost = Dictionary.toggleState[title],
                 ["StreamGuard"] = () =>
                 {
-                    StreamGuardHelper.ApplyStreamGuardToAllWindows(Dictionary.toggleState[title]);
+                    StreamGuardManager.ApplyStreamGuardToAllWindows(Dictionary.toggleState[title]);
                 },
                 ["EMA Smoothening"] = () =>
                 {
@@ -645,13 +853,19 @@ namespace Aimmy2
             bool useXPercent = Dictionary.toggleState["X Axis Percentage Adjustment"];
             bool thresholdEnabled = Dictionary.toggleState["Sticky Aim"];
 
-            uiManager.S_StickyAimThreshold.Visibility = thresholdEnabled ? Visibility.Visible : Visibility.Collapsed;
+            // Null checks in case AimMenu hasn't been loaded yet
+            if (uiManager.S_StickyAimThreshold != null)
+                uiManager.S_StickyAimThreshold.Visibility = thresholdEnabled ? Visibility.Visible : Visibility.Collapsed;
 
-            uiManager.S_YOffset.Visibility = useYPercent ? Visibility.Collapsed : Visibility.Visible;
-            uiManager.S_YOffsetPercent.Visibility = useYPercent ? Visibility.Visible : Visibility.Collapsed;
+            if (uiManager.S_YOffset != null)
+                uiManager.S_YOffset.Visibility = useYPercent ? Visibility.Collapsed : Visibility.Visible;
+            if (uiManager.S_YOffsetPercent != null)
+                uiManager.S_YOffsetPercent.Visibility = useYPercent ? Visibility.Visible : Visibility.Collapsed;
 
-            uiManager.S_XOffset.Visibility = useXPercent ? Visibility.Collapsed : Visibility.Visible;
-            uiManager.S_XOffsetPercent.Visibility = useXPercent ? Visibility.Visible : Visibility.Collapsed;
+            if (uiManager.S_XOffset != null)
+                uiManager.S_XOffset.Visibility = useXPercent ? Visibility.Collapsed : Visibility.Visible;
+            if (uiManager.S_XOffsetPercent != null)
+                uiManager.S_XOffsetPercent.Visibility = useXPercent ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private Visibility GetToggleVisibility(string title, bool collapsed = false) =>
@@ -724,18 +938,7 @@ namespace Aimmy2
             {
                 ["Model Switch Keybind"] = HandleModelSwitch,
                 ["Dynamic FOV Keybind"] = () => ApplyDynamicFOV(true),
-                ["Emergency Stop Keybind"] = HandleEmergencyStop,
-                ["Anti Recoil Keybind"] = () => HandleAntiRecoil(true),
-                ["Disable Anti Recoil Keybind"] = DisableAntiRecoil,
-                ["Gun 1 Key"] = () => LoadGunConfig("Gun 1 Config"),
-                ["Gun 2 Key"] = () => LoadGunConfig("Gun 2 Config"),
-                // Keybinds for toggles
-                ["Aim Assist TKB"] = () => uiManager.T_AimAligner.Reader.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)),
-                ["Constant AI Tracking TKB"] = () => uiManager.T_ConstantAITracking.Reader.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)),
-                ["Predictions TKB"] = () => uiManager.T_Predictions.Reader.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)),
-                ["EMA Smoothening TKB"] = () => uiManager.T_EMASmoothing.Reader.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)),
-                ["Sticky Aim TKB"] = () => uiManager.T_StickyAim.Reader.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)),
-                ["Enable StreamGuard TKB"] = () => uiManager.T_StreamGuard.Reader.RaiseEvent(new RoutedEventArgs(Button.ClickEvent))
+                ["Emergency Stop Keybind"] = HandleEmergencyStop
             };
 
             handlers.GetValueOrDefault(bindingId)?.Invoke();
@@ -745,8 +948,7 @@ namespace Aimmy2
         {
             var handlers = new Dictionary<string, Action>
             {
-                ["Dynamic FOV Keybind"] = () => ApplyDynamicFOV(false),
-                ["Anti Recoil Keybind"] = () => HandleAntiRecoil(false)
+                ["Dynamic FOV Keybind"] = () => ApplyDynamicFOV(false)
             };
 
             handlers.GetValueOrDefault(bindingId)?.Invoke();
@@ -822,43 +1024,6 @@ namespace Aimmy2
                     UpdateToggleUI(toggles[i], false);
             }
             LogManager.Log(LogManager.LogLevel.Info, "[Emergency Stop Keybind] Disabled all AI features.", true);
-        }
-
-        private void HandleAntiRecoil(bool start)
-        {
-            if (!Dictionary.toggleState["Anti Recoil"]) return;
-
-            if (start)
-            {
-                arManager.IndependentMousePress = 0;
-                arManager.HoldDownTimer.Start();
-            }
-            else
-            {
-                arManager.HoldDownTimer.Stop();
-                arManager.IndependentMousePress = 0;
-            }
-        }
-
-        private void DisableAntiRecoil()
-        {
-            if (!Dictionary.toggleState["Anti Recoil"]) return;
-
-            Dictionary.toggleState["Anti Recoil"] = false;
-            UpdateToggleUI(uiManager.T_AntiRecoil!, false);
-
-            LogManager.Log(LogManager.LogLevel.Info, "[Disable Anti Recoil Keybind] Disabled Anti-Recoil.", true);
-        }
-
-        private void LoadGunConfig(string configKey)
-        {
-            if (Dictionary.toggleState["Enable Gun Switching Keybind"])
-            {
-                if (Dictionary.filelocationState.TryGetValue(configKey, out var configPath))
-                {
-                    LoadAntiRecoilConfig(configPath.ToString(), true);
-                }
-            }
         }
 
         #endregion
@@ -967,10 +1132,21 @@ namespace Aimmy2
                     }
                 }
             }
+
+            // Update slider visibility based on loaded states
+            UpdatePredictionSliderVisibility();
+            UpdateAimAssistSliderVisibility();
+            UpdateAimConfigSliderVisibility();
+        }
+
+        internal static void ApplyConfigLoadDefaults(IDictionary<string, dynamic> sliderSettings)
+        {
+            sliderSettings["AI FPS Limit"] = 0;
         }
 
         private void LoadConfig(string path = "bin\\configs\\Default.cfg", bool loading_from_configlist = false)
         {
+            ApplyConfigLoadDefaults(Dictionary.sliderSettings);
             SaveDictionary.LoadJSON(Dictionary.sliderSettings, path);
             SaveDictionary.LoadJSON(Dictionary.dropdownState, path);
 
@@ -1007,9 +1183,9 @@ namespace Aimmy2
         {
             var sliderConfigs = new[]
             {
-                ("Fire Rate", uiManager.S_FireRate, 1.0),
                 ("FOV Size", uiManager.S_FOVSize, 640.0),
                 ("Mouse Sensitivity (+/-)", uiManager.S_MouseSensitivity, 0.8),
+                ("AI FPS Limit", uiManager.S_AIFpsLimit, 0.0),
                 ("Mouse Jitter", uiManager.S_MouseJitter, 0.0),
                 ("Sticky Aim Threshold", uiManager.S_StickyAimThreshold, 50),
                 ("EMA Smoothening", uiManager.S_EMASmoothing, 0.5),
@@ -1018,7 +1194,10 @@ namespace Aimmy2
                 ("Y Offset (%)", uiManager.S_YOffsetPercent, 0.0),
                 ("X Offset (%)", uiManager.S_XOffsetPercent, 0.0),
                 ("Auto Trigger Delay", uiManager.S_AutoTriggerDelay, 0.25),
-                ("AI Minimum Confidence", uiManager.S_AIMinimumConfidence, 50.0)
+                ("AI Minimum Confidence", uiManager.S_AIMinimumConfidence, 50.0),
+                ("Kalman Lead Time", uiManager.S_KalmanLeadTime, 0.10),
+                ("WiseTheFox Lead Time", uiManager.S_WiseTheFoxLeadTime, 0.15),
+                ("Shalloe Lead Multiplier", uiManager.S_ShalloeLeadMultiplier, 3.0)
             };
 
             ApplySliderValues(sliderConfigs, Dictionary.sliderSettings);
@@ -1059,6 +1238,16 @@ namespace Aimmy2
                     ["ddxoft Virtual Input Driver"] = 4
                 }),
 
+                ("Image Size", uiManager.D_ImageSize, new Dictionary<string, int>
+                {
+                    ["640"] = 0,
+                    ["512"] = 1,
+                    ["416"] = 2,
+                    ["320"] = 3,
+                    ["256"] = 4,
+                    ["160"] = 5
+                }),
+
                 ("Movement Path", uiManager.D_MovementPath, new Dictionary<string, int>
                 {
                     ["Cubic Bezier"] = 0,
@@ -1082,66 +1271,90 @@ namespace Aimmy2
             };
 
             ApplyDropdownValues(dropdownConfigs, Dictionary.dropdownState);
+
+            // Update prediction slider visibility based on selected method
+            UpdatePredictionSliderVisibility();
         }
 
-        public void LoadAntiRecoilConfig(string path = "bin\\anti_recoil_configs\\Default.cfg", bool loading_outside_startup = false)
+        public void UpdatePredictionSliderVisibility()
         {
-            try
+            // Hide all prediction sliders first
+            if (uiManager.S_KalmanLeadTime != null)
+                uiManager.S_KalmanLeadTime.Visibility = Visibility.Collapsed;
+            if (uiManager.S_WiseTheFoxLeadTime != null)
+                uiManager.S_WiseTheFoxLeadTime.Visibility = Visibility.Collapsed;
+            if (uiManager.S_ShalloeLeadMultiplier != null)
+                uiManager.S_ShalloeLeadMultiplier.Visibility = Visibility.Collapsed;
+
+            // Don't show sliders if Predictions section is collapsed
+            if (Dictionary.minimizeState.TryGetValue("Predictions", out var collapsed) && collapsed == true)
+                return;
+
+            // Get selected method from actual dropdown selection
+            var selectedItem = uiManager.D_PredictionMethod?.DropdownBox?.SelectedItem as ComboBoxItem;
+            string selectedMethod = selectedItem?.Content?.ToString() ?? "";
+
+            // Show only the relevant slider based on selected method
+            switch (selectedMethod)
             {
-                // Ensure directory exists
-                string? directory = Path.GetDirectoryName(path);
-                if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
-                {
-                    Directory.CreateDirectory(directory);
-                }
-
-                if (!File.Exists(path))
-                {
-                    // Create default config file
-                    SaveDictionary.WriteJSON(Dictionary.AntiRecoilSettings, path);
-
-                    // Only show notification if not during startup
-                    if (loading_outside_startup)
-                    {
-                        LogManager.Log(LogManager.LogLevel.Info, "[Anti Recoil] Created default config.", true);
-                    }
-                    return;
-                }
-
-                SaveDictionary.LoadJSON(Dictionary.AntiRecoilSettings, path);
-
-                if (!loading_outside_startup || _menuControls["AimMenu"] == null || !_menuInitialized["AimMenu"])
-                    return;
-
-                ApplyAntiRecoilConfig();
-
-                // Only show notification if not during startup
-                if (loading_outside_startup)
-                {
-                    LogManager.Log(LogManager.LogLevel.Info, $"[Anti Recoil] Loaded \"{path}\"", true);
-                }
-            }
-            catch (Exception e)
-            {
-                // Only show error if not during startup
-                if (loading_outside_startup)
-                {
-                    LogManager.Log(LogManager.LogLevel.Error, $"Error loading anti-recoil config: {e.Message}", true);
-                }
+                case "Kalman Filter":
+                    if (uiManager.S_KalmanLeadTime != null)
+                        uiManager.S_KalmanLeadTime.Visibility = Visibility.Visible;
+                    break;
+                case "Shall0e's Prediction":
+                    if (uiManager.S_ShalloeLeadMultiplier != null)
+                        uiManager.S_ShalloeLeadMultiplier.Visibility = Visibility.Visible;
+                    break;
+                case "wisethef0x's EMA Prediction":
+                    if (uiManager.S_WiseTheFoxLeadTime != null)
+                        uiManager.S_WiseTheFoxLeadTime.Visibility = Visibility.Visible;
+                    break;
             }
         }
 
-        private void ApplyAntiRecoilConfig()
+        public void UpdateAimAssistSliderVisibility()
         {
-            var sliderConfigs = new[]
+            // Don't show sliders if Aim Assist section is collapsed
+            if (Dictionary.minimizeState.TryGetValue("Aim Assist", out var collapsed) && collapsed == true)
             {
-                ("Hold Time", uiManager.S_HoldTime, 0.0),
-                ("Fire Rate", uiManager.S_FireRate, 1.0),
-                ("Y Recoil (Up/Down)", uiManager.S_YAntiRecoilAdjustment, 0.0),
-                ("X Recoil (Left/Right)", uiManager.S_XAntiRecoilAdjustment, 0.0)
-            };
+                if (uiManager.S_StickyAimThreshold != null)
+                    uiManager.S_StickyAimThreshold.Visibility = Visibility.Collapsed;
+                return;
+            }
 
-            ApplySliderValues(sliderConfigs, Dictionary.AntiRecoilSettings);
+            // Show Sticky Aim Threshold only if Sticky Aim is enabled
+            if (uiManager.S_StickyAimThreshold != null)
+            {
+                uiManager.S_StickyAimThreshold.Visibility = Dictionary.toggleState["Sticky Aim"]
+                    ? Visibility.Visible : Visibility.Collapsed;
+            }
+        }
+
+        public void UpdateAimConfigSliderVisibility()
+        {
+            // Don't show sliders if Aim Config section is collapsed
+            if (Dictionary.minimizeState.TryGetValue("Aim Config", out var collapsed) && collapsed == true)
+            {
+                if (uiManager.S_YOffset != null) uiManager.S_YOffset.Visibility = Visibility.Collapsed;
+                if (uiManager.S_YOffsetPercent != null) uiManager.S_YOffsetPercent.Visibility = Visibility.Collapsed;
+                if (uiManager.S_XOffset != null) uiManager.S_XOffset.Visibility = Visibility.Collapsed;
+                if (uiManager.S_XOffsetPercent != null) uiManager.S_XOffsetPercent.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            // Y Axis: Show pixel offset when toggle is OFF, percentage offset when toggle is ON
+            bool yPercentEnabled = Dictionary.toggleState["Y Axis Percentage Adjustment"];
+            if (uiManager.S_YOffset != null)
+                uiManager.S_YOffset.Visibility = yPercentEnabled ? Visibility.Collapsed : Visibility.Visible;
+            if (uiManager.S_YOffsetPercent != null)
+                uiManager.S_YOffsetPercent.Visibility = yPercentEnabled ? Visibility.Visible : Visibility.Collapsed;
+
+            // X Axis: Show pixel offset when toggle is OFF, percentage offset when toggle is ON
+            bool xPercentEnabled = Dictionary.toggleState["X Axis Percentage Adjustment"];
+            if (uiManager.S_XOffset != null)
+                uiManager.S_XOffset.Visibility = xPercentEnabled ? Visibility.Collapsed : Visibility.Visible;
+            if (uiManager.S_XOffsetPercent != null)
+                uiManager.S_XOffsetPercent.Visibility = xPercentEnabled ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void ApplySliderValues((string key, ASlider? slider, double defaultValue)[] configs, Dictionary<string, dynamic> source)
@@ -1203,7 +1416,7 @@ namespace Aimmy2
         public AColorChanger AddColorChanger(StackPanel panel, string title) =>
             throw new NotImplementedException("Use control's internal implementation");
 
-        public ASlider AddSlider(StackPanel panel, string title, string label, double frequency, double buttonsteps, double min, double max, bool For_Anti_Recoil = false) =>
+        public ASlider AddSlider(StackPanel panel, string title, string label, double frequency, double buttonsteps, double min, double max) =>
             throw new NotImplementedException("Use control's internal implementation");
 
         public ADropdown AddDropdown(StackPanel panel, string title) =>

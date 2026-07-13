@@ -23,6 +23,9 @@ namespace Class
         //Aim Config
         public ATitle? AT_AimConfig { get; set; }
 
+        // Predictions
+        public ATitle? AT_Predictions { get; set; }
+
         public ADropdown? D_PredictionMethod { get; set; }
         public ADropdown? D_MovementPath { get; set; }
         public ADropdown? D_DetectionAreaType { get; set; }
@@ -37,6 +40,9 @@ namespace Class
         public ASlider? S_XOffset { get; set; }
         public ASlider? S_XOffsetPercent { get; set; }
         public ASlider? S_EMASmoothing { get; set; }
+        public ASlider? S_KalmanLeadTime { get; set; }
+        public ASlider? S_WiseTheFoxLeadTime { get; set; }
+        public ASlider? S_ShalloeLeadMultiplier { get; set; }
 
         // Triggerbot
         public ATitle? AT_TriggerBot { get; set; }
@@ -47,32 +53,6 @@ namespace Class
         public AToggle? T_CursorCheck { get; set; }
 
         public ASlider? S_AutoTriggerDelay { get; set; }
-
-        // Anti Recoil
-        public ATitle? AT_AntiRecoil { get; set; }
-
-        public AToggle? T_AntiRecoil { get; set; }
-
-        public AKeyChanger? C_AntiRecoilKeybind { get; set; }
-        public AKeyChanger? C_ToggleAntiRecoilKeybind { get; set; }
-        public ASlider? S_HoldTime { get; set; }
-        public APButton? B_RecordFireRate { get; set; }
-        public ASlider? S_FireRate { get; set; }
-        public ASlider? S_YAntiRecoilAdjustment { get; set; }
-        public ASlider? S_XAntiRecoilAdjustment { get; set; }
-
-        // Anti Recoil Config
-        public ATitle? AT_AntiRecoilConfig { get; set; }
-
-        public AToggle? T_EnableGunSwitchingKeybind { get; set; }
-
-        public APButton? B_SaveRecoilConfig { get; set; }
-        public AKeyChanger? C_Gun1Key { get; set; }
-        public AFileLocator? AFL_Gun1Config { get; set; }
-        public AKeyChanger? C_Gun2Key { get; set; }
-        public AFileLocator? AFL_Gun2Config { get; set; }
-        public APButton? B_LoadGun1Config { get; set; }
-        public APButton? B_LoadGun2Config { get; set; }
 
         // FOV
         public ATitle? AT_FOV { get; set; }
@@ -101,6 +81,10 @@ namespace Class
         public ASlider? S_DPBorderThickness { get; set; }
         public ASlider? S_DPOpacity { get; set; }
 
+        // Model Settings
+        public ATitle? AT_ModelSettings { get; set; }
+        public ASlider? S_AIFpsLimit { get; set; }
+
         // Settings UI
         public ATitle? AT_SettingsMenu { get; set; }
         public AToggle? T_CollectDataWhilePlaying { get; set; }
@@ -121,8 +105,7 @@ namespace Class
         public AToggle? T_StreamGuard { get; set; }
         //--
 
-        // X/Y Percentage Adjustment Enabler
-        public ATitle? AT_XYPercentageAdjustmentEnabler { get; set; }
+        // X/Y Percentage Adjustment (in Aim Config)
         public AToggle? T_XAxisPercentageAdjustment { get; set; }
         public AToggle? T_YAxisPercentageAdjustment { get; set; }
 

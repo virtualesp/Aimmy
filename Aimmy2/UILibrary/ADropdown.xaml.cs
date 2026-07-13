@@ -11,11 +11,19 @@ namespace UILibrary
     {
         private string main_dictionary_path { get; set; }
 
-        public ADropdown(string title, string dictionary_path)
+        public ADropdown(string title, string dictionary_path, string? tooltip = null)
         {
             InitializeComponent();
             DropdownTitle.Content = title;
             main_dictionary_path = dictionary_path;
+
+            if (!string.IsNullOrEmpty(tooltip))
+            {
+                var tt = new System.Windows.Controls.ToolTip { Content = tooltip };
+                if (TryFindResource("Tooltip") is System.Windows.Style style)
+                    tt.Style = style;
+                ToolTip = tt;
+            }
         }
 
         private void DropdownBox_SelectionChanged(object sender, SelectionChangedEventArgs e)

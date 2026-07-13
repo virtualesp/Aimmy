@@ -1,7 +1,6 @@
-﻿using System;
-using System.Management;
-using Vortice.DXGI;
+﻿using System.Management;
 using Visuality;
+using Vortice.DXGI;
 
 namespace Aimmy2.Class
 {

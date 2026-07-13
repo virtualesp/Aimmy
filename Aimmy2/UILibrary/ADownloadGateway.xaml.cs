@@ -25,7 +25,8 @@ namespace Aimmy2.UILibrary
                 DownloadButton.Content = "\xE895";
                 SetupHttpClientHeaders();
 
-                var downloadUri = new Uri($"https://github.com/BabyHamsta/Aimmy/raw/Aimmy-V2/{Path}/{Name}");
+                var encodedName = Uri.EscapeDataString(Name);
+                var downloadUri = new Uri($"https://github.com/BabyHamsta/Aimmy/raw/Aimmy-V2/{Path}/{encodedName}");
                 var downloadResult = await DownloadFileAsync(downloadUri, Path, Name);
 
                 if (downloadResult)

@@ -83,7 +83,8 @@ namespace Aimmy2.Class
         private static void OnDisplaySettingsChanged(object? sender, EventArgs e)
         {
             // Add delay to ensure system has updated display info
-            Task.Delay(1000).ContinueWith(t => {
+            Task.Delay(1000).ContinueWith(t =>
+            {
                 ForceRefresh();
             });
         }

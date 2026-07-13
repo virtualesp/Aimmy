@@ -14,7 +14,6 @@ namespace Class
             {
                 "bin",
                 "bin\\configs",
-                "bin\\anti_recoil_configs",
                 "bin\\labels",
                 "bin\\models"
             };

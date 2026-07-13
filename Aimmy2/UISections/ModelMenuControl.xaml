@@ -10,9 +10,9 @@
                   PanningMode="VerticalOnly">
         <Grid>
             <TabControl HorizontalContentAlignment="Left"
-                        Margin="10,0,10,0">
-                <TabItem BorderThickness="0"
-                         Padding="0"
+                        Margin="10,0,10,0"
+                        Style="{StaticResource ModelsTabControl}">
+                <TabItem Style="{StaticResource ModelsTabItem}"
                          Height="33">
                     <TabItem.Header>
                         <TextBlock Text="Local Models"
@@ -37,6 +37,7 @@
                                 FontFamily="{StaticResource Atkinson Hyperlegible}"
                                 Padding="5"
                                 Foreground="White"
+                                CaretBrush="White"
                                 TextChanged="LocalModelSearchBox_TextChanged">
                                     </TextBox>
                                 </Border>
@@ -89,10 +90,9 @@
                                 Tag="models" />
                     </Grid>
                 </TabItem>
-                <TabItem BorderThickness="0"
-                         Padding="0"
+                <TabItem Style="{StaticResource ModelsTabItem}"
                          Height="33"
-                         Width="75">
+                         Width="90">
                     <TabItem.Header>
                         <TextBlock Text="Local Configs"
                                    FontSize="11"
@@ -116,6 +116,7 @@
                                         FontFamily="{StaticResource Atkinson Hyperlegible}"
                                         Padding="5"
                                         Foreground="White"
+                                        CaretBrush="White"
                                         TextChanged="LocalConfigSearchBox_TextChanged">
                                     </TextBox>
                                 </Border>
@@ -167,8 +168,7 @@
                                 Tag="configs" />
                     </Grid>
                 </TabItem>
-                <TabItem BorderThickness="0"
-                         Padding="0"
+                <TabItem Style="{StaticResource ModelsTabItem}"
                          Height="33"
                          Width="132">
                     <TabItem.Header>
@@ -200,6 +200,7 @@
                                         FontFamily="{StaticResource Atkinson Hyperlegible}"
                                         Padding="5"
                                         Foreground="White"
+                                        CaretBrush="White"
                                         TextChanged="SearchBox_TextChanged">
                                     </TextBox>
                                 </Border>
@@ -208,8 +209,7 @@
                         </ScrollViewer>
                     </Grid>
                 </TabItem>
-                <TabItem BorderThickness="0"
-                         Padding="10,0,10,0"
+                <TabItem Style="{StaticResource ModelsTabItem}"
                          Height="33"
                          Width="132">
                     <TabItem.Header>
@@ -241,6 +241,7 @@
                                         FontFamily="{StaticResource Atkinson Hyperlegible}"
                                         Padding="5"
                                         Foreground="White"
+                                        CaretBrush="White"
                                         TextChanged="CSearchBox_TextChanged">
                                     </TextBox>
                                 </Border>

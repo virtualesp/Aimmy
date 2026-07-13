@@ -4,8 +4,26 @@ name: .NET Core Desktop
 on:
   push:
     branches: [ "Aimmy-V2" ]
+    paths:
+      - 'Aimmy2/**'
+      - 'Aimmy2.sln'
+      - '**/*.csproj'
+      - '**/*.props'
+      - '**/*.targets'
+      - 'global.json'
+      - 'NuGet.config'
+      - '.github/workflows/dotnet-desktop.yml'
   pull_request:
     branches: [ "Aimmy-V2" ]
+    paths:
+      - 'Aimmy2/**'
+      - 'Aimmy2.sln'
+      - '**/*.csproj'
+      - '**/*.props'
+      - '**/*.targets'
+      - 'global.json'
+      - 'NuGet.config'
+      - '.github/workflows/dotnet-desktop.yml'
 
 jobs:
 

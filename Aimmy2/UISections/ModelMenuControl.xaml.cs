@@ -1,17 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using Aimmy2.UILibrary;
+using Other;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
-using Aimmy2.Class;
-using Aimmy2.UILibrary;
-using Other;
 using Visuality;
-using System.Security.Cryptography;
 
 namespace Aimmy2.Controls
 {

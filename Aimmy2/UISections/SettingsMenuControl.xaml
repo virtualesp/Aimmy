@@ -22,7 +22,7 @@
             <StackPanel x:Name="SSP2"
                         Grid.Column="1"
                         Margin="5,0,10,0">
-                <StackPanel x:Name="XYPercentageEnablerMenu" />
+                <StackPanel x:Name="ModelSettings" />
                 <StackPanel x:Name="ThemeMenu" />
             </StackPanel>
         </Grid>

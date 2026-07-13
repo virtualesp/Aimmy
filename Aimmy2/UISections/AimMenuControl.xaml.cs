@@ -1,16 +1,16 @@
 ﻿using Aimmy2.AILogic;
 using Aimmy2.Class;
+using Aimmy2.MouseMovementLibraries.GHubSupport;
 using Aimmy2.UILibrary;
 using Class;
 using InputLogic;
-using Microsoft.Win32;
+using MouseMovementLibraries.ddxoftSupport;
+using MouseMovementLibraries.RazerSupport;
 using Other;
-using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using UILibrary;
-using Visuality;
 
 namespace Aimmy2.Controls
 {
@@ -28,9 +28,8 @@ namespace Aimmy2.Controls
         {
             { "Aim Assist", false },
             { "Aim Config", false },
+            { "Predictions", false },
             { "Auto Trigger", false },
-            { "Anti Recoil", false },
-            { "Anti Recoil Config", false },
             { "FOV Config", false },
             { "ESP Config", false }
         };
@@ -38,10 +37,9 @@ namespace Aimmy2.Controls
         // Public properties for MainWindow access
         public StackPanel AimAssistPanel => AimAssist;
         public StackPanel TriggerBotPanel => TriggerBot;
-        public StackPanel AntiRecoilPanel => AntiRecoil;
         public StackPanel ESPConfigPanel => ESPConfig;
         public StackPanel AimConfigPanel => AimConfig;
-        public StackPanel ARConfigPanel => ARConfig;
+        public StackPanel PredictionsPanel => Predictions;
         public StackPanel FOVConfigPanel => FOVConfig;
         public ScrollViewer AimMenuScrollViewer => AimMenu;
 
@@ -60,15 +58,13 @@ namespace Aimmy2.Controls
             // Load minimize states from global dictionary if they exist
             LoadMinimizeStatesFromGlobal();
 
-            AIManager.ClassesUpdated += OnClassesChanged;
             AIManager.ImageSizeUpdated += OnImageSizeChanged;
 
             // Load all sections
             LoadAimAssist();
             LoadAimConfig();
+            LoadPredictions();
             LoadTriggerBot();
-            LoadAntiRecoil();
-            LoadAntiRecoilConfig();
             LoadFOVConfig();
             LoadESPConfig();
 
@@ -101,9 +97,8 @@ namespace Aimmy2.Controls
         {
             ApplyPanelState("Aim Assist", AimAssistPanel);
             ApplyPanelState("Aim Config", AimConfigPanel);
+            ApplyPanelState("Predictions", PredictionsPanel);
             ApplyPanelState("Auto Trigger", TriggerBotPanel);
-            ApplyPanelState("Anti Recoil", AntiRecoilPanel);
-            ApplyPanelState("Anti Recoil Config", ARConfigPanel);
             ApplyPanelState("FOV Config", FOVConfigPanel);
             ApplyPanelState("ESP Config", ESPConfigPanel);
         }
@@ -143,6 +138,7 @@ namespace Aimmy2.Controls
             SaveMinimizeStatesToGlobal();
         }
 
+
         #endregion
 
         #region Menu Section Loaders
@@ -156,7 +152,11 @@ namespace Aimmy2.Controls
                 .AddTitle("Aim Assist", true, t =>
                 {
                     uiManager.AT_Aim = t;
-                    t.Minimize.Click += (s, e) => TogglePanel("Aim Assist", AimAssistPanel);
+                    t.Minimize.Click += (s, e) =>
+                    {
+                        TogglePanel("Aim Assist", AimAssistPanel);
+                        _mainWindow?.UpdateAimAssistSliderVisibility();
+                    };
                 })
                 .AddToggle("Aim Assist", t =>
                 {
@@ -170,12 +170,7 @@ namespace Aimmy2.Controls
                             LogManager.Log(LogManager.LogLevel.Warning, "Please load a model first", true);
                         }
                     };
-                })
-                .AddKeyChanger("Aim Assist TKB")
-                .AddKeyChanger("Aim Keybind", k => uiManager.C_Keybind = k)
-                .AddKeyChanger("Second Aim Keybind")
-                .AddToggle("Sticky Aim", t => uiManager.T_StickyAim = t)
-                .AddKeyChanger("Sticky Aim TKB")
+                }, tooltip: "Turn aim assist on or off. You must load a model first.")
                 .AddToggle("Constant AI Tracking", t =>
                 {
                     uiManager.T_ConstantAITracking = t;
@@ -195,15 +190,19 @@ namespace Aimmy2.Controls
                             }
                         }
                     };
-                })
-                .AddKeyChanger("Constant AI Tracking TKB")
-                .AddToggle("Predictions", t => uiManager.T_Predictions = t)
-                .AddKeyChanger("Predictions TKB")
-                .AddToggle("EMA Smoothening", t => uiManager.T_EMASmoothing = t)
-                .AddKeyChanger("EMA Smoothening TKB")
-                .AddKeyChanger("Emergency Stop Keybind", k => uiManager.C_EmergencyKeybind = k)
-                .AddToggle("Enable Model Switch Keybind", t => uiManager.T_EnableModelSwitchKeybind = t)
-                .AddKeyChanger("Model Switch Keybind", k => uiManager.C_ModelSwitchKeybind = k)
+                }, tooltip: "Always track targets without holding a key. When off, you must hold the aim keybind.")
+                .AddToggle("Sticky Aim", t => uiManager.T_StickyAim = t,
+                    tooltip: "Lock onto a target until it moves out of range instead of switching targets.")
+                .AddSlider("Sticky Aim Threshold", "Pixels", 1, 1, 0, 100, s =>
+                {
+                    uiManager.S_StickyAimThreshold = s;
+                    // Set initial visibility based on toggle state
+                    s.Visibility = Dictionary.toggleState["Sticky Aim"]
+                        ? Visibility.Visible : Visibility.Collapsed;
+                }, tooltip: "How far a target must move before switching to a new one. Higher = stays locked longer.")
+                .AddKeyChanger("Aim Keybind", k => uiManager.C_Keybind = k,
+                    tooltip: "The key you hold to activate aim assist.")
+                .AddKeyChanger("Second Aim Keybind", tooltip: "An alternate key to activate aim assist.")
                 .AddSeparator();
         }
 
@@ -216,17 +215,43 @@ namespace Aimmy2.Controls
                 .AddTitle("Aim Config", true, t =>
                 {
                     uiManager.AT_AimConfig = t;
-                    t.Minimize.Click += (s, e) => TogglePanel("Aim Config", AimConfigPanel);
+                    t.Minimize.Click += (s, e) =>
+                    {
+                        TogglePanel("Aim Config", AimConfigPanel);
+                        _mainWindow?.UpdateAimConfigSliderVisibility();
+                    };
                 })
-                .AddDropdown("Prediction Method", d =>
+                .AddDropdown("Mouse Movement Method", d =>
                 {
-                    d.DropdownBox.SelectedIndex = -1;
-                    uiManager.D_PredictionMethod = d;
-                    _mainWindow.AddDropdownItem(d, "Kalman Filter");
-                    _mainWindow.AddDropdownItem(d, "Shall0e's Prediction");
-                    _mainWindow.AddDropdownItem(d, "wisethef0x's EMA Prediction");
-                })
+                    uiManager.D_MouseMovementMethod = d;
+                    d.DropdownBox.SelectedIndex = -1;  // Prevent auto-selection
 
+                    // Add options
+                    _mainWindow.AddDropdownItem(d, "Mouse Event");
+                    _mainWindow.AddDropdownItem(d, "SendInput");
+                    uiManager.DDI_LGHUB = _mainWindow.AddDropdownItem(d, "LG HUB");
+                    uiManager.DDI_RazerSynapse = _mainWindow.AddDropdownItem(d, "Razer Synapse (Require Razer Peripheral)");
+                    uiManager.DDI_ddxoft = _mainWindow.AddDropdownItem(d, "ddxoft Virtual Input Driver");
+
+                    // Setup handlers
+                    uiManager.DDI_LGHUB.Selected += async (s, e) =>
+                    {
+                        if (!new LGHubMain().Load())
+                            await ResetToMouseEvent();
+                    };
+
+                    uiManager.DDI_RazerSynapse.Selected += async (s, e) =>
+                    {
+                        if (!await RZMouse.Load())
+                            await ResetToMouseEvent();
+                    };
+
+                    uiManager.DDI_ddxoft.Selected += async (s, e) =>
+                    {
+                        if (!await DdxoftMain.Load())
+                            await ResetToMouseEvent();
+                    };
+                }, tooltip: "How mouse movements are sent. Try different options if aim assist isn't working.")
                 .AddDropdown("Movement Path", d =>
                 {
                     d.DropdownBox.SelectedIndex = 0;
@@ -236,7 +261,7 @@ namespace Aimmy2.Controls
                     _mainWindow.AddDropdownItem(d, "Linear");
                     _mainWindow.AddDropdownItem(d, "Adaptive");
                     _mainWindow.AddDropdownItem(d, "Perlin Noise");
-                })
+                }, tooltip: "The curve style used when moving to a target. Affects how natural the movement looks.")
                 .AddDropdown("Detection Area Type", d =>
                 {
                     d.DropdownBox.SelectedIndex = -1;
@@ -252,7 +277,7 @@ namespace Aimmy2.Controls
                             Convert.ToInt16((WinAPICaller.ScreenHeight / 2) / WinAPICaller.scalingFactorY) - 320,
                             0, 0);
                     };
-                })
+                }, tooltip: "How targets are prioritized. Center screen is best for most games.")
                 .AddDropdown("Aiming Boundaries Alignment", d =>
                 {
                     d.DropdownBox.SelectedIndex = -1;
@@ -260,14 +285,7 @@ namespace Aimmy2.Controls
                     _mainWindow.AddDropdownItem(d, "Center");
                     _mainWindow.AddDropdownItem(d, "Top");
                     _mainWindow.AddDropdownItem(d, "Bottom");
-                })
-                .AddDropdown("Target Class", d =>
-                {
-                    d.DropdownBox.SelectedIndex = 0;
-                    uiManager.D_TargetClass = d;
-                    _mainWindow.AddDropdownItem(d, "Best Confidence");
-                    UpdateTargetClassDropdown(d);
-                });
+                }, tooltip: "Where to aim on the detected target box. Center is usually best.");
 
             // Add sliders with validation
             AddConfigSliders(builder, uiManager);
@@ -290,23 +308,91 @@ namespace Aimmy2.Controls
                             LogManager.Log(LogManager.LogLevel.Warning,
                                 "The Mouse Sensitivity you have set can cause Aimmy to be unstable to aim, please increase if you suffer from this problem", true);
                     };
-                })
-                .AddSlider("Mouse Jitter", "Jitter", 1, 1, 0, 15, s => uiManager.S_MouseJitter = s)
-                .AddSlider("Sticky Aim Threshold", "Pixels", 1, 1, 0, 100, s =>
+                }, tooltip: "How fast the aim moves. Lower = faster and snappier, higher = slower and smoother.")
+                .AddSlider("Mouse Jitter", "Jitter", 1, 1, 0, 15, s => uiManager.S_MouseJitter = s,
+                    tooltip: "Adds random small movements to make aim look more human-like.")
+                .AddToggle("Y Axis Percentage Adjustment", t => uiManager.T_YAxisPercentageAdjustment = t,
+                    tooltip: "Enable the Y Offset (%) slider to adjust aim vertically by percentage.")
+                .AddToggle("X Axis Percentage Adjustment", t => uiManager.T_XAxisPercentageAdjustment = t,
+                    tooltip: "Enable the X Offset (%) slider to adjust aim horizontally by percentage.")
+                .AddSlider("Y Offset (Up/Down)", "Offset", 1, 1, -150, 150, s =>
                 {
-                    uiManager.S_StickyAimThreshold = s;
-                    var value = s.Slider.Value;
-                    if (value <= 10)
+                    uiManager.S_YOffset = s;
+                    // Set initial visibility based on toggle state
+                    s.Visibility = Dictionary.toggleState["Y Axis Percentage Adjustment"]
+                        ? Visibility.Collapsed : Visibility.Visible;
+                }, tooltip: "Move aim point up (negative) or down (positive) in pixels.")
+                .AddSlider("Y Offset (%)", "Percent", 1, 1, 0, 100, s =>
+                {
+                    uiManager.S_YOffsetPercent = s;
+                    // Set initial visibility based on toggle state
+                    s.Visibility = Dictionary.toggleState["Y Axis Percentage Adjustment"]
+                        ? Visibility.Visible : Visibility.Collapsed;
+                }, tooltip: "Move aim point up or down as a percentage of the target box height.")
+                .AddSlider("X Offset (Left/Right)", "Offset", 1, 1, -150, 150, s =>
+                {
+                    uiManager.S_XOffset = s;
+                    // Set initial visibility based on toggle state
+                    s.Visibility = Dictionary.toggleState["X Axis Percentage Adjustment"]
+                        ? Visibility.Collapsed : Visibility.Visible;
+                }, tooltip: "Move aim point left (negative) or right (positive) in pixels.")
+                .AddSlider("X Offset (%)", "Percent", 1, 1, 0, 100, s =>
+                {
+                    uiManager.S_XOffsetPercent = s;
+                    // Set initial visibility based on toggle state
+                    s.Visibility = Dictionary.toggleState["X Axis Percentage Adjustment"]
+                        ? Visibility.Visible : Visibility.Collapsed;
+                }, tooltip: "Move aim point left or right as a percentage of the target box width.");
+        }
+
+        private void LoadPredictions()
+        {
+            var uiManager = _mainWindow!.uiManager;
+            var builder = new SectionBuilder(this, Predictions);
+
+            builder
+                .AddTitle("Predictions", true, t =>
+                {
+                    uiManager.AT_Predictions = t;
+                    t.Minimize.Click += (s, e) =>
                     {
-                        LogManager.Log(LogManager.LogLevel.Warning,
-                            "The threshold you have set may cause sticky aim to not work as intended, please increase if you suffer from this issue.\nINFO: The Sticky aim threshold is how many pixels it will take until it realizes the target is gone and moves on to another target",
-                            true, 10000);
-                    }
+                        TogglePanel("Predictions", PredictionsPanel);
+                        _mainWindow?.UpdatePredictionSliderVisibility();
+                    };
                 })
-                .AddSlider("Y Offset (Up/Down)", "Offset", 1, 1, -150, 150, s => uiManager.S_YOffset = s)
-                .AddSlider("Y Offset (%)", "Percent", 1, 1, 0, 100, s => uiManager.S_YOffsetPercent = s)
-                .AddSlider("X Offset (Left/Right)", "Offset", 1, 1, -150, 150, s => uiManager.S_XOffset = s)
-                .AddSlider("X Offset (%)", "Percent", 1, 1, 0, 100, s => uiManager.S_XOffsetPercent = s)
+                .AddToggle("Predictions", t => uiManager.T_Predictions = t,
+                    tooltip: "Predict where a moving target will be. Helps track fast-moving targets.")
+                .AddDropdown("Prediction Method", d =>
+                {
+                    d.DropdownBox.SelectedIndex = -1;
+                    uiManager.D_PredictionMethod = d;
+                    _mainWindow.AddDropdownItem(d, "Kalman Filter");
+                    _mainWindow.AddDropdownItem(d, "Shall0e's Prediction");
+                    _mainWindow.AddDropdownItem(d, "wisethef0x's EMA Prediction");
+
+                    // Update slider visibility when prediction method changes
+                    d.DropdownBox.SelectionChanged += (s, e) => _mainWindow?.UpdatePredictionSliderVisibility();
+                }, tooltip: "The algorithm used to predict target movement. Try different ones to see what works best.")
+                .AddSlider("Kalman Lead Time", "Seconds", 0.01, 0.01, 0.02, 0.30, s =>
+                {
+                    uiManager.S_KalmanLeadTime = s;
+                    // Start collapsed - visibility will be set by LoadDropdownStates
+                    s.Visibility = Visibility.Collapsed;
+                }, tooltip: "How far ahead to predict target position. Higher = more prediction, may overshoot.")
+                .AddSlider("WiseTheFox Lead Time", "Seconds", 0.01, 0.01, 0.02, 0.30, s =>
+                {
+                    uiManager.S_WiseTheFoxLeadTime = s;
+                    // Start collapsed - visibility will be set by LoadDropdownStates
+                    s.Visibility = Visibility.Collapsed;
+                }, tooltip: "How far ahead to predict target position. Higher = more prediction, may overshoot.")
+                .AddSlider("Shalloe Lead Multiplier", "Frames", 0.5, 0.5, 1, 10, s =>
+                {
+                    uiManager.S_ShalloeLeadMultiplier = s;
+                    // Start collapsed - visibility will be set by LoadDropdownStates
+                    s.Visibility = Visibility.Collapsed;
+                }, tooltip: "How many frames ahead to predict. Higher = more prediction, may overshoot.")
+                .AddToggle("EMA Smoothening", t => uiManager.T_EMASmoothing = t,
+                    tooltip: "Smooth out aim movements to reduce jitter and make tracking steadier.")
                 .AddSlider("EMA Smoothening", "Amount", 0.01, 0.01, 0.01, 1, s =>
                 {
                     uiManager.S_EMASmoothing = s;
@@ -317,8 +403,10 @@ namespace Aimmy2.Controls
                             MouseManager.smoothingFactor = s.Slider.Value;
                         }
                     };
-                });
+                }, tooltip: "How much smoothing to apply. Lower = smoother but slower, higher = faster but jittery.")
+                .AddSeparator();
         }
+
         private void LoadTriggerBot()
         {
             var uiManager = _mainWindow!.uiManager;
@@ -330,84 +418,15 @@ namespace Aimmy2.Controls
                     uiManager.AT_TriggerBot = t;
                     t.Minimize.Click += (s, e) => TogglePanel("Auto Trigger", TriggerBotPanel);
                 })
-                .AddToggle("Auto Trigger", t => uiManager.T_AutoTrigger = t)
-                .AddToggle("Cursor Check", t => uiManager.T_CursorCheck = t)
-                .AddToggle("Spray Mode", t => uiManager.T_SprayMode = t)
-                //.AddToggle("Only When Held", t => uiManager.T_OnlyWhenHeld = t) 
-                .AddSlider("Auto Trigger Delay", "Seconds", 0.01, 0.1, 0.01, 1, s => uiManager.S_AutoTriggerDelay = s)
-                .AddSeparator();
-        }
-
-        private void LoadAntiRecoil()
-        {
-            var uiManager = _mainWindow!.uiManager;
-            var builder = new SectionBuilder(this, AntiRecoil);
-
-            builder
-                .AddTitle("Anti Recoil", true, t =>
-                {
-                    uiManager.AT_AntiRecoil = t;
-                    t.Minimize.Click += (s, e) => TogglePanel("Anti Recoil", AntiRecoilPanel);
-                })
-                .AddToggle("Anti Recoil", t => uiManager.T_AntiRecoil = t)
-                .AddKeyChanger("Anti Recoil Keybind", k => uiManager.C_AntiRecoilKeybind = k, "Left")
-                .AddKeyChanger("Disable Anti Recoil Keybind", k => uiManager.C_ToggleAntiRecoilKeybind = k, "Oem6")
-                .AddSlider("Hold Time", "Milliseconds", 1, 1, 1, 1000, s => uiManager.S_HoldTime = s, true)
-                .AddButton("Record Fire Rate", b =>
-                {
-                    uiManager.B_RecordFireRate = b;
-                    b.Reader.Click += (s, e) => new SetAntiRecoil(_mainWindow).Show();
-                })
-                .AddSlider("Fire Rate", "Milliseconds", 1, 1, 1, 5000, s => uiManager.S_FireRate = s, true)
-                .AddSlider("Y Recoil (Up/Down)", "Move", 1, 1, -1000, 1000, s => uiManager.S_YAntiRecoilAdjustment = s, true)
-                .AddSlider("X Recoil (Left/Right)", "Move", 1, 1, -1000, 1000, s => uiManager.S_XAntiRecoilAdjustment = s, true)
-                .AddSeparator();
-        }
-
-        private void LoadAntiRecoilConfig()
-        {
-            var uiManager = _mainWindow!.uiManager;
-            var builder = new SectionBuilder(this, ARConfig);
-
-            builder
-                .AddTitle("Anti Recoil Config", true, t =>
-                {
-                    uiManager.AT_AntiRecoilConfig = t;
-                    t.Minimize.Click += (s, e) => TogglePanel("Anti Recoil Config", ARConfigPanel);
-                })
-                .AddToggle("Enable Gun Switching Keybind", t => uiManager.T_EnableGunSwitchingKeybind = t)
-                .AddButton("Save Anti Recoil Config", b =>
-                {
-                    uiManager.B_SaveRecoilConfig = b;
-                    b.Reader.Click += (s, e) =>
-                    {
-                        var saveFileDialog = new SaveFileDialog
-                        {
-                            InitialDirectory = $"{Directory.GetCurrentDirectory()}\\bin\\anti_recoil_configs",
-                            Filter = "Aimmy Style Recoil Config (*.cfg)|*.cfg"
-                        };
-
-                        if (saveFileDialog.ShowDialog() == true)
-                        {
-                            SaveDictionary.WriteJSON(Dictionary.AntiRecoilSettings, saveFileDialog.FileName);
-                            LogManager.Log(LogManager.LogLevel.Info, $"[Anti Recoil] Config has been saved to \"{saveFileDialog.FileName}\"", true);
-                        }
-                    };
-                })
-                .AddKeyChanger("Gun 1 Key", k => uiManager.C_Gun1Key = k, "D1")
-                .AddFileLocator("Gun 1 Config", f => uiManager.AFL_Gun1Config = f, "Aimmy Style Recoil Config (*.cfg)|*.cfg", "\\bin\\anti_recoil_configs")
-                .AddKeyChanger("Gun 2 Key", k => uiManager.C_Gun2Key = k, "D2")
-                .AddFileLocator("Gun 2 Config", f => uiManager.AFL_Gun2Config = f, "Aimmy Style Recoil Config (*.cfg)|*.cfg", "\\bin\\anti_recoil_configs")
-                .AddButton("Load Gun 1 Config", b =>
-                {
-                    uiManager.B_LoadGun1Config = b;
-                    b.Reader.Click += (s, e) => _mainWindow.LoadAntiRecoilConfig(Dictionary.filelocationState["Gun 1 Config"], true);
-                })
-                .AddButton("Load Gun 2 Config", b =>
-                {
-                    uiManager.B_LoadGun2Config = b;
-                    b.Reader.Click += (s, e) => _mainWindow.LoadAntiRecoilConfig(Dictionary.filelocationState["Gun 2 Config"], true);
-                })
+                .AddToggle("Auto Trigger", t => uiManager.T_AutoTrigger = t,
+                    tooltip: "Automatically click when a target is detected in your crosshair area.")
+                .AddToggle("Cursor Check", t => uiManager.T_CursorCheck = t,
+                    tooltip: "Only trigger when cursor is directly on target. More accurate but may miss some shots.")
+                .AddToggle("Spray Mode", t => uiManager.T_SprayMode = t,
+                    tooltip: "Hold down fire instead of single clicks. Good for automatic weapons.")
+                //.AddToggle("Only When Held", t => uiManager.T_OnlyWhenHeld = t)
+                .AddSlider("Auto Trigger Delay", "Seconds", 0.01, 0.1, 0.01, 1, s => uiManager.S_AutoTriggerDelay = s,
+                    tooltip: "Wait time before firing after detecting a target. Helps avoid accidental shots.")
                 .AddSeparator();
         }
 
@@ -422,10 +441,14 @@ namespace Aimmy2.Controls
                     uiManager.AT_FOV = t;
                     t.Minimize.Click += (s, e) => TogglePanel("FOV Config", FOVConfigPanel);
                 })
-                .AddToggle("FOV", t => uiManager.T_FOV = t)
-                .AddToggle("Dynamic FOV", t => uiManager.T_DynamicFOV = t)
-                .AddToggle("Third Person Support", t => uiManager.T_ThirdPersonSupport = t)
-                .AddKeyChanger("Dynamic FOV Keybind", k => uiManager.C_DynamicFOV = k)
+                .AddToggle("FOV", t => uiManager.T_FOV = t,
+                    tooltip: "Show a circle on screen indicating the detection area.")
+                .AddToggle("Dynamic FOV", t => uiManager.T_DynamicFOV = t,
+                    tooltip: "Change FOV size when holding a key. Useful for scoping in.")
+                .AddToggle("Third Person Support", t => uiManager.T_ThirdPersonSupport = t,
+                    tooltip: "Adjust FOV position for third-person camera games.")
+                .AddKeyChanger("Dynamic FOV Keybind", k => uiManager.C_DynamicFOV = k,
+                    tooltip: "The key to hold for switching to the dynamic FOV size.")
                 .AddDropdown("FOV Style", d =>
                 {
                     uiManager.D_FOVSTYLE = d;
@@ -444,7 +467,7 @@ namespace Aimmy2.Controls
                         MainWindow.FOVWindow.Circle.Visibility = Visibility.Collapsed;
                         MainWindow.FOVWindow.RectangleShape.Visibility = Visibility.Visible;
                     };
-                })
+                }, tooltip: "Shape of the FOV overlay. Circle is most common.")
                 .AddColorChanger("FOV Color", c =>
                 {
                     c.Reader.Click += (s, e) =>
@@ -456,16 +479,16 @@ namespace Aimmy2.Controls
                         }
 
                         Color initialColor = Colors.White;
-                        if (c.Reader.Background is SolidColorBrush scb)
+                        if (c.ColorChangingBorder.Background is SolidColorBrush scb)
                             initialColor = scb.Color;
                         fovColorPickerInstance = new UISections.ColorPicker(initialColor, "FOV Color");
 
                         fovColorPickerInstance.ColorChanged += (color) =>
                         {
-                            if (uiManager?.CC_FOVColor?.Reader != null)
-                            {
-                                uiManager.CC_FOVColor.Reader.Background = new SolidColorBrush(color);
-                            }
+                            // Update the color square
+                            c.ColorChangingBorder.Background = new SolidColorBrush(color);
+                            // Save to dictionary for persistence
+                            Dictionary.colorState["FOV Color"] = $"#{color.A:X2}{color.R:X2}{color.G:X2}{color.B:X2}";
                             PropertyChanger.PostColor(color);
                         };
 
@@ -485,7 +508,7 @@ namespace Aimmy2.Controls
                         _mainWindow.ActualFOV = s.Slider.Value;
                         PropertyChanger.PostNewFOVSize(_mainWindow.ActualFOV);
                     };
-                })
+                }, tooltip: "Size of the detection area. Smaller = more precise, larger = wider coverage.")
                 .AddSlider("Dynamic FOV Size", "Size", 1, 1, 10, 640, s =>
                 {
                     uiManager.S_DynamicFOVSize = s;
@@ -494,7 +517,7 @@ namespace Aimmy2.Controls
                         if (Dictionary.toggleState["Dynamic FOV"])
                             PropertyChanger.PostNewFOVSize(s.Slider.Value);
                     };
-                })
+                }, tooltip: "FOV size when holding the Dynamic FOV key. Usually smaller for scoped aim.")
                 .AddSeparator();
         }
 
@@ -509,9 +532,12 @@ namespace Aimmy2.Controls
                     uiManager.AT_DetectedPlayer = t;
                     t.Minimize.Click += (s, e) => TogglePanel("ESP Config", ESPConfigPanel);
                 })
-                .AddToggle("Show Detected Player", t => uiManager.T_ShowDetectedPlayer = t)
-                .AddToggle("Show AI Confidence", t => uiManager.T_ShowAIConfidence = t)
-                .AddToggle("Show Tracers", t => uiManager.T_ShowTracers = t);
+                .AddToggle("Show Detected Player", t => uiManager.T_ShowDetectedPlayer = t,
+                    tooltip: "Draw a box around detected targets on screen.")
+                .AddToggle("Show AI Confidence", t => uiManager.T_ShowAIConfidence = t,
+                    tooltip: "Display how confident the AI is about each detection (0-100%).")
+                .AddToggle("Show Tracers", t => uiManager.T_ShowTracers = t,
+                    tooltip: "Draw lines from screen edge to detected targets.");
 
             builder.AddDropdown("Tracer Position", d =>
             {
@@ -538,7 +564,7 @@ namespace Aimmy2.Controls
                         }
                     }
                 };
-            });
+            }, tooltip: "Where tracer lines start from on the screen.");
 
             builder
                 .AddColorChanger("Detected Player Color", c =>
@@ -552,16 +578,16 @@ namespace Aimmy2.Controls
                         }
 
                         Color initialColor = Colors.White;
-                        if (c.Reader.Background is SolidColorBrush scb)
+                        if (c.ColorChangingBorder.Background is SolidColorBrush scb)
                             initialColor = scb.Color;
                         colorPickerInstance = new UISections.ColorPicker(initialColor, "ESP Color");
 
                         colorPickerInstance.ColorChanged += (color) =>
                         {
-                            if (uiManager?.CC_DetectedPlayerColor?.Reader != null)
-                            {
-                                uiManager.CC_DetectedPlayerColor.Reader.Background = new SolidColorBrush(color);
-                            }
+                            // Update the color square
+                            c.ColorChangingBorder.Background = new SolidColorBrush(color);
+                            // Save to dictionary for persistence
+                            Dictionary.colorState["Detected Player Color"] = $"#{color.A:X2}{color.R:X2}{color.G:X2}{color.B:X2}";
                             PropertyChanger.PostDPColor(color);
                         };
 
@@ -577,75 +603,28 @@ namespace Aimmy2.Controls
                 {
                     uiManager.S_DPFontSize = s;
                     s.Slider.ValueChanged += (sender, e) => PropertyChanger.PostDPFontSize((int)s.Slider.Value);
-                })
+                }, tooltip: "Text size for the confidence percentage display.")
                 .AddSlider("Corner Radius", "Radius", 1, 1, 0, 100, s =>
                 {
                     uiManager.S_DPCornerRadius = s;
                     s.Slider.ValueChanged += (sender, e) => PropertyChanger.PostDPWCornerRadius((int)s.Slider.Value);
-                })
+                }, tooltip: "How rounded the detection box corners are. 0 = sharp corners.")
                 .AddSlider("Border Thickness", "Thickness", 0.1, 1, 0.1, 10, s =>
                 {
                     uiManager.S_DPBorderThickness = s;
                     s.Slider.ValueChanged += (sender, e) => PropertyChanger.PostDPWBorderThickness(s.Slider.Value);
-                })
+                }, tooltip: "How thick the detection box outline is.")
                 .AddSlider("Opacity", "Opacity", 0.1, 0.1, 0, 1, s =>
                 {
                     uiManager.S_DPOpacity = s;
                     s.Slider.ValueChanged += (sender, e) => PropertyChanger.PostDPWOpacity(s.Slider.Value);
-                })
+                }, tooltip: "How see-through the detection box is. 0 = invisible, 1 = solid.")
                 .AddSeparator();
         }
 
         #endregion
 
         #region Helper Methods
-
-        private void OnClassesChanged(Dictionary<int, string> classes)
-        {
-            Application.Current.Dispatcher.Invoke(() =>
-            {
-                if (_mainWindow?.uiManager.D_TargetClass != null)
-                {
-                    UpdateTargetClassDropdown(_mainWindow.uiManager.D_TargetClass, classes);
-                }
-            });
-        }
-
-        private void UpdateTargetClassDropdown(ADropdown dropdown, Dictionary<int, string>? _classes = null)
-        {
-            if (dropdown?.DropdownBox == null) return;
-            string? selection = (dropdown.DropdownBox.SelectedItem as ComboBoxItem)?.Content?.ToString();
-
-            var removedItems = dropdown.DropdownBox.Items.Cast<ComboBoxItem>()
-                .Where(item => item.Content?.ToString() != "Best Confidence")
-                .ToList();
-
-            foreach (var item in removedItems)
-            {
-                dropdown.DropdownBox.Items.Remove(item);
-            }
-
-            var classes = _classes ?? FileManager.AIManager?.ModelClasses ?? new Dictionary<int, string>();
-
-            foreach (var kvp in classes.OrderBy(x => x.Key))
-            {
-                _mainWindow!.AddDropdownItem(dropdown, kvp.Value);
-            }
-
-            if (!string.IsNullOrEmpty(selection)) // tries to restore the selection
-            {
-                for (int i = 0; i < dropdown.DropdownBox.Items.Count; i++)
-                {
-                    if ((dropdown.DropdownBox.Items[i] as ComboBoxItem)?.Content?.ToString() == selection)
-                    {
-                        dropdown.DropdownBox.SelectedIndex = i;
-                        return;
-                    }
-                }
-            }
-
-            dropdown.DropdownBox.SelectedIndex = 0;
-        }
 
         private void OnImageSizeChanged(int imageSize)
         {
@@ -666,6 +645,12 @@ namespace Aimmy2.Controls
                 slider.Slider.Value = imageSize;
             }
             slider.Slider.Maximum = imageSize;
+        }
+
+        private async Task ResetToMouseEvent()
+        {
+            await Task.Delay(500);
+            _mainWindow!.uiManager.D_MouseMovementMethod!.DropdownBox.SelectedIndex = 0;
         }
 
         private void HandleColorChange(AColorChanger colorChanger, string settingKey, Action<Color> updateAction)
@@ -709,35 +694,35 @@ namespace Aimmy2.Controls
                 return this;
             }
 
-            public SectionBuilder AddToggle(string title, Action<AToggle>? configure = null)
+            public SectionBuilder AddToggle(string title, Action<AToggle>? configure = null, string? tooltip = null)
             {
-                var toggle = _parent.CreateToggle(title);
+                var toggle = _parent.CreateToggle(title, tooltip);
                 configure?.Invoke(toggle);
                 _panel.Children.Add(toggle);
                 return this;
             }
 
-            public SectionBuilder AddKeyChanger(string title, Action<AKeyChanger>? configure = null, string? defaultKey = null)
+            public SectionBuilder AddKeyChanger(string title, Action<AKeyChanger>? configure = null, string? defaultKey = null, string? tooltip = null)
             {
                 var key = defaultKey ?? Dictionary.bindingSettings[title];
-                var keyChanger = _parent.CreateKeyChanger(title, key);
+                var keyChanger = _parent.CreateKeyChanger(title, key, tooltip);
                 configure?.Invoke(keyChanger);
                 _panel.Children.Add(keyChanger);
                 return this;
             }
 
             public SectionBuilder AddSlider(string title, string label, double frequency, double buttonSteps,
-                double min, double max, Action<ASlider>? configure = null, bool forAntiRecoil = false)
+                double min, double max, Action<ASlider>? configure = null, string? tooltip = null)
             {
-                var slider = _parent.CreateSlider(title, label, frequency, buttonSteps, min, max, forAntiRecoil);
+                var slider = _parent.CreateSlider(title, label, frequency, buttonSteps, min, max, tooltip);
                 configure?.Invoke(slider);
                 _panel.Children.Add(slider);
                 return this;
             }
 
-            public SectionBuilder AddDropdown(string title, Action<ADropdown>? configure = null)
+            public SectionBuilder AddDropdown(string title, Action<ADropdown>? configure = null, string? tooltip = null)
             {
-                var dropdown = _parent.CreateDropdown(title);
+                var dropdown = _parent.CreateDropdown(title, tooltip);
                 configure?.Invoke(dropdown);
                 _panel.Children.Add(dropdown);
                 return this;
@@ -751,9 +736,9 @@ namespace Aimmy2.Controls
                 return this;
             }
 
-            public SectionBuilder AddButton(string title, Action<APButton>? configure = null)
+            public SectionBuilder AddButton(string title, Action<APButton>? configure = null, string? tooltip = null)
             {
-                var button = new APButton(title);
+                var button = new APButton(title, tooltip);
                 configure?.Invoke(button);
                 _panel.Children.Add(button);
                 return this;
@@ -780,9 +765,9 @@ namespace Aimmy2.Controls
 
         #region Control Creation Methods
 
-        private AToggle CreateToggle(string title)
+        private AToggle CreateToggle(string title, string? tooltip = null)
         {
-            var toggle = new AToggle(title);
+            var toggle = new AToggle(title, tooltip);
             _mainWindow!.toggleInstances[title] = toggle;
 
             // Set initial state
@@ -802,9 +787,9 @@ namespace Aimmy2.Controls
             return toggle;
         }
 
-        private AKeyChanger CreateKeyChanger(string title, string keybind)
+        private AKeyChanger CreateKeyChanger(string title, string keybind, string? tooltip = null)
         {
-            var keyChanger = new AKeyChanger(title, keybind);
+            var keyChanger = new AKeyChanger(title, keybind, tooltip);
 
             keyChanger.Reader.Click += (sender, e) =>
             {
@@ -829,21 +814,20 @@ namespace Aimmy2.Controls
         }
 
         private ASlider CreateSlider(string title, string label, double frequency, double buttonSteps,
-            double min, double max, bool forAntiRecoil = false)
+            double min, double max, string? tooltip = null)
         {
-            var slider = new ASlider(title, label, buttonSteps)
+            var slider = new ASlider(title, label, buttonSteps, tooltip)
             {
                 Slider = { Minimum = min, Maximum = max, TickFrequency = frequency }
             };
 
-            var settings = forAntiRecoil ? Dictionary.AntiRecoilSettings : Dictionary.sliderSettings;
-            slider.Slider.Value = settings.TryGetValue(title, out var value) ? value : min;
-            slider.Slider.ValueChanged += (s, e) => settings[title] = slider.Slider.Value;
+            slider.Slider.Value = Dictionary.sliderSettings.TryGetValue(title, out var value) ? value : min;
+            slider.Slider.ValueChanged += (s, e) => Dictionary.sliderSettings[title] = slider.Slider.Value;
 
             return slider;
         }
 
-        private ADropdown CreateDropdown(string title) => new(title, title);
+        private ADropdown CreateDropdown(string title, string? tooltip = null) => new(title, title, tooltip);
 
         private AColorChanger CreateColorChanger(string title)
         {
